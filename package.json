@@ -1,0 +1,21 @@
+{
+  "name": "pm2-gui-web",
+  "version": "1.0.0",
+  "description": "Web-based GUI for PM2 process manager — deployable on IIS (Windows Server 2019)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pm2": "^7.0.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

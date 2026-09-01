@@ -1,0 +1,117 @@
+<div class="process-card" [class]="statusClass">
+
+  <!-- Card top: status badge -->
+  <div class="card-top">
+    <div class="card-icon" [class]="'card-icon--' + process.status">
+      @switch (process.status) {
+        @case ('online') {
+          <mat-icon>check_circle</mat-icon>
+        }
+        @case ('stopped') {
+          <mat-icon>stop_circle</mat-icon>
+        }
+        @case ('errored') {
+          <mat-icon>error</mat-icon>
+        }
+        @default {
+          <mat-icon>help</mat-icon>
+        }
+      }
+    </div>
+
+    <span class="status-badge" [class]="'badge--' + process.status">
+      {{ statusLabel }}
+    </span>
+  </div>
+
+  <!-- Card body -->
+  <div class="card-body">
+    <h3 class="proc-name" [matTooltip]="process.name">{{ process.name }}</h3>
+
+    <div class="proc-meta">
+      <div class="meta-row">
+        <mat-icon class="meta-icon">tag</mat-icon>
+        <span>ID: {{ process.id }}</span>
+        <span class="meta-sep">·</span>
+        <span>PID: {{ process.pid }}</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">folder_open</mat-icon>
+        <span [matTooltip]="process.execPath" class="meta-path">{{ shortPath(process.execPath) }}</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">memory</mat-icon>
+        <span>{{ process.cpu }}% CPU</span>
+        <span class="meta-sep">·</span>
+        <span>{{ formatMemory(process.memory) }} RAM</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">schedule</mat-icon>
+        <span>Uptime: {{ formatUptime(process.uptime) }}</span>
+        <span class="meta-sep">·</span>
+        <span>↺ {{ process.restarts }}</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">settings</mat-icon>
+        <span>{{ process.execMode }}</span>
+        @if (process.execMode === 'cluster') {
+          <span class="meta-sep">·</span>
+          <span>{{ process.instances }}x</span>
+        }
+        @if (process.watch) {
+          <span class="watch-badge">watch</span>
+        }
+      </div>
+    </div>
+
+    <!-- Error box -->
+    @if (process.status === 'errored') {
+      <div class="error-box">
+        <mat-icon>warning</mat-icon>
+        <span>Processo com erro — verifique os logs</span>
+      </div>
+    }
+  </div>
+
+  <!-- Card footer: actions -->
+  <div class="card-footer">
+    @if (process.status === 'online') {
+      <button class="btn-action btn-action--stop" (click)="onStop.emit(process)" matTooltip="Parar">
+        <mat-icon>stop</mat-icon>
+        Parar
+      </button>
+    } @else {
+      <button class="btn-action btn-action--start" (click)="onStart.emit(process)" matTooltip="Iniciar">
+        <mat-icon>play_arrow</mat-icon>
+        Iniciar
+      </button>
+    }
+
+    <button class="btn-action btn-action--restart" (click)="onRestart.emit(process)" matTooltip="Reiniciar">
+      <mat-icon>refresh</mat-icon>
+    </button>
+
+    <button class="btn-action btn-action--logs" (click)="onLogs.emit(process)" matTooltip="Ver Logs">
+      <mat-icon>description</mat-icon>
+    </button>
+
+    <button mat-icon-button [matMenuTriggerFor]="moreMenu" class="btn-more">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+
+    <mat-menu #moreMenu="matMenu">
+      <button mat-menu-item (click)="onReload.emit(process)">
+        <mat-icon>autorenew</mat-icon>
+        Reload (gracioso)
+      </button>
+      <button mat-menu-item (click)="onDescribe.emit(process)">
+        <mat-icon>info</mat-icon>
+        Detalhes (describe)
+      </button>
+      <button mat-menu-item (click)="onDelete.emit(process)" class="menu-item--danger">
+        <mat-icon>delete</mat-icon>
+        Remover
+      </button>
+    </mat-menu>
+  </div>
+</div>

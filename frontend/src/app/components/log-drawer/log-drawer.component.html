@@ -1,0 +1,62 @@
+<div class="drawer-overlay" (click)="close.emit()"></div>
+
+<aside class="log-drawer">
+  <!-- Header -->
+  <div class="drawer-header">
+    <div class="drawer-title">
+      <mat-icon>description</mat-icon>
+      <span>Logs — {{ processName }}</span>
+    </div>
+    <div class="drawer-actions">
+      <button
+        class="live-btn"
+        [class.active]="liveMode()"
+        (click)="toggleLive()"
+        matTooltip="Transmissão ao vivo"
+      >
+        <span class="live-dot" [class.pulsing]="liveMode()"></span>
+        {{ liveMode() ? 'Ao Vivo' : 'Histórico' }}
+      </button>
+      <button mat-icon-button (click)="copyLogs()" matTooltip="Copiar logs">
+        <mat-icon>content_copy</mat-icon>
+      </button>
+      <button mat-icon-button (click)="clearView()" matTooltip="Limpar visão">
+        <mat-icon>clear_all</mat-icon>
+      </button>
+      <button mat-icon-button (click)="close.emit()" matTooltip="Fechar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <button class="filter-btn" [class.active]="filter() === 'all'" (click)="filter.set('all')">Todos</button>
+    <button class="filter-btn" [class.active]="filter() === 'out'" (click)="filter.set('out')">stdout</button>
+    <button class="filter-btn" [class.active]="filter() === 'err'" (click)="filter.set('err')">stderr</button>
+    <span class="log-count">{{ filtered.length }} linha(s)</span>
+  </div>
+
+  <!-- Log content -->
+  <div class="log-content">
+    @if (loading()) {
+      <div class="log-loading">
+        <mat-progress-spinner mode="indeterminate" diameter="28" />
+        <span>Carregando logs...</span>
+      </div>
+    } @else if (filtered.length === 0) {
+      <div class="log-empty">
+        <mat-icon>info</mat-icon>
+        <span>Sem entradas de log para este processo.</span>
+      </div>
+    } @else {
+      @for (line of filtered; track $index) {
+        <div class="log-line" [class]="'log-line--' + line.type">
+          <span class="log-type">{{ line.type }}</span>
+          <span class="log-text">{{ line.text }}</span>
+        </div>
+      }
+      <div #logEnd></div>
+    }
+  </div>
+</aside>

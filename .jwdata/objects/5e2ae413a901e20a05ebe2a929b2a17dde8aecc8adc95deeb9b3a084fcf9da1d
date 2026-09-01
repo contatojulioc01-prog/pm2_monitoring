@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <!-- 
+          ATENÇÃO PARA EVITAR O ERRO HTTP 400.605 (Max-Forwards limit / Loop de Proxy):
+          - O servidor Node.js roda em uma porta interna (ex: 6767).
+          - O IIS (site pai ou site na porta 8081) redireciona as requisições para http://localhost:6767/{R:1}.
+          - Se a regra do IIS redirecionar para a MESMA porta em que o site IIS está escutando (ex: IIS em 8081 reescrevendo para 8081), ocorre um loop infinito (Max-Forwards limit).
+
+          Exemplo de regra no site pai (docebrinquedo.local no IIS):
+          <rule name="pm2-manager" stopProcessing="true">
+            <match url="^pm2-manager(?:/(.*))?$" />
+            <action type="Rewrite" url="http://localhost:6767/{R:1}" />
+          </rule>
+        -->
+        <rule name="PM2GUI-ReverseProxy" stopProcessing="true">
+          <!-- Pega TUDO e joga pro Node.js na porta interna 6767 -->
+          <match url="(.*)" />
+          <action type="Rewrite" url="http://localhost:6767/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+    <httpProtocol>
+      <customHeaders>
+        <add name="X-Content-Type-Options" value="nosniff" />
+        <add name="X-Frame-Options" value="SAMEORIGIN" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>

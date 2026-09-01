@@ -1,0 +1,101 @@
+/* ══════════════════════════════════════════════════════════════
+   Global Styles & Theming — PM2 Manager
+   ══════════════════════════════════════════════════════════════ */
+
+@import '@angular/material/prebuilt-themes/azure-blue.css';
+
+:root {
+  /* LIGHT MODE (Default) */
+  --bg-page: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-footer: #f8fafc;
+  --bg-chip: #e2e8f0;
+  --bg-code: #f1f5f9;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  
+  --border-color: #e2e8f0;
+  
+  --accent: #4F46E5;
+  --accent-hover: #4338ca;
+}
+
+[data-theme="dark"], .dark-theme {
+  /* DARK MODE */
+  --bg-page: #0b1120;
+  --bg-surface: #1e293b;
+  --bg-hover: #334155;
+  --bg-footer: #0f172a;
+  --bg-chip: #334155;
+  --bg-code: #0f172a;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  
+  --border-color: #334155;
+  
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+}
+
+/* Reset & Base */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Overrides for Angular Material in Dark Mode */
+.dark-theme {
+  .mat-mdc-dialog-container .mdc-dialog__surface {
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+  }
+  
+  .mat-mdc-menu-panel {
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+  }
+  
+  .mat-mdc-menu-item {
+    color: var(--text-primary);
+    .mat-icon { color: var(--text-muted); }
+    &:hover { background-color: var(--bg-hover) !important; }
+  }
+  
+  .mdc-text-field--outlined .mdc-notched-outline {
+    border-color: var(--border-color);
+  }
+  
+  .mdc-text-field--outlined:not(.mdc-text-field--disabled) .mdc-text-field__input {
+    color: var(--text-primary);
+  }
+  
+  .mdc-text-field--outlined:not(.mdc-text-field--disabled) .mdc-floating-label {
+    color: var(--text-muted);
+  }
+
+  .mat-mdc-select-value-text {
+    color: var(--text-primary);
+  }
+
+  .mat-mdc-option {
+    color: var(--text-primary);
+    &:hover, &.mdc-list-item--selected { background-color: var(--bg-hover); }
+  }
+
+  .mat-mdc-select-panel {
+    background-color: var(--bg-surface);
+  }
+  
+  .mat-divider {
+    border-color: var(--border-color);
+  }
+}

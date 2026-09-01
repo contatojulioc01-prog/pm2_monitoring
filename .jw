@@ -1,0 +1,38 @@
+{
+  "deployPath": [
+    "."
+  ],
+  "deployFolder": "DC-PM2-GUI-WEB",
+  "postDeployCommands": [
+    "npm i"
+  ],
+  "backup": {
+    "enabled": true,
+    "folder": "BKP-PM2-GUI-WEB",
+    "format": "tar.gz"
+  },
+  "manifestFile": "jw-deploys.json",
+  "identity": {
+    "name": "Jc"
+  },
+  "servers": [
+    "dev",
+    "prod"
+  ],
+  "remoteByServer": {
+    "dev": {
+      "remotePath": "/home/deploys"
+    },
+    "prod": {
+      "remotePath": "c:/server"
+    }
+  },
+  "pm2ByServer": {
+    "dev": {
+      "startArguments": "server.js --name PM2-Manager"
+    },
+    "prod": {
+      "process": 10
+    }
+  }
+}
