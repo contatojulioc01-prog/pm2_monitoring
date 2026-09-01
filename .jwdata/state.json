@@ -1,5 +1,5 @@
 {
-  "lastCommit": "79e78a1e-cf9e-4602-8853-698511ac6092",
+  "lastCommit": "430fb62f-be84-4869-8937-f53ecc31225e",
   "commits": [
     {
       "id": "50d84e5b-17d7-4f55-8509-3e3c29affe3b",
@@ -711,21 +711,207 @@
       "pushedTo": [
         "prod"
       ]
+    },
+    {
+      "id": "5be75d95-6113-467c-a14b-b3d71bab7d02",
+      "date": "2026-09-01T16:07:45.225Z",
+      "message": "update",
+      "changes": {
+        "added": [
+          "frontend/src/app/components/resource-pie-chart/resource-pie-chart.component.ts",
+          "public/browser/chunk-M4AQOIIR.js",
+          "public/browser/main-6WOHC2UY.js"
+        ],
+        "modified": [
+          "frontend/.angular/cache/22.1.6/frontend/.tsbuildinfo",
+          "frontend/.angular/cache/22.1.6/frontend/angular-compiler.db-lock",
+          "frontend/src/app/pages/dashboard/dashboard.component.html",
+          "frontend/src/app/pages/dashboard/dashboard.component.scss",
+          "frontend/src/app/pages/dashboard/dashboard.component.ts",
+          "frontend/src/app/services/pm2.service.ts",
+          "public/browser/index.html",
+          "server.js"
+        ],
+        "deleted": [
+          "public/browser/chunk-4LLZYMVU.js",
+          "public/browser/main-SZWGXSXX.js"
+        ]
+      },
+      "snapshot": {
+        ".jwignore": "98dc44b6ebde0fa57dda157d70395589ab9d45154f8369685361debe8691191d",
+        "frontend/.angular/cache/22.1.6/frontend/.tsbuildinfo": "ebb2a3afbac7251a5be23f512d287f8cc203b632c8046ad0a0fd82d5cd6e962b",
+        "frontend/.angular/cache/22.1.6/frontend/angular-compiler.db": "fb4b7bf9b08d15959cb162b328ce6eb406842bf803236cc26f03a951a1ccee01",
+        "frontend/.angular/cache/22.1.6/frontend/angular-compiler.db-lock": "6018e15989344bfe3d085c0fbbb136940daadba2d313467087f1aa95b874d202",
+        "frontend/.editorconfig": "9da1d179fa691e796ec7cb26d719e2308a073594b7c7c77756d1ba4560e295be",
+        "frontend/.gitignore": "ae6d22f040c44292c421a5c0715e28b9330b8c26d9f2bf08c7935374c6147967",
+        "frontend/.prettierrc": "7bbd911f1ad35a68fd6c04d83c101b4ab1d08c1f8008623c056a27070a735532",
+        "frontend/.vscode/extensions.json": "2f13a5bb182525a4150f20e023a17eacb5411eaf6877d60209ac3cea86ab5c85",
+        "frontend/.vscode/launch.json": "0dd378135c3d394a1e07e9c28af48edea54c5690a805de42c7df101d5e195574",
+        "frontend/.vscode/tasks.json": "63d74d916c9875099b559cfaed85a493c9297a7c03805e18132ca383db045895",
+        "frontend/angular.json": "8e56791b51c9a107e114aba1202f48476fc9fc980145a8c7efaea80da916aeb1",
+        "frontend/package-lock.json": "aa4112a9bd58e083d8bde111743f4384dfa889df4531e6682fab331be26fcfed",
+        "frontend/package.json": "f5f3136ccf2d3b4649d1d2e458288337f8f99fa452ce8065b495fc4a79750dcd",
+        "frontend/public/favicon.ico": "842a63e4d8a62be944422123a2887792333f550992f955c05b318bda1f3e457f",
+        "frontend/public/images.png": "8058d024373f9e88bd855070362372cfbca03615ae5d7c54ff17a7c8dfa65b8a",
+        "frontend/README.md": "d515c185869ec7f40a51afff566934004eebc9ccc203f0a8e5e9120bd85c4312",
+        "frontend/src/app/app.config.ts": "3f18d2657f55674b94123ab4be664b6b9d55ba688f0d494bdcdd3881c14e319d",
+        "frontend/src/app/app.html": "046500f97ba60f3ee569a75912c8ab2c09ba2cc96b54ec1637f494a71394736c",
+        "frontend/src/app/app.routes.ts": "1cedc0fd9b09372f25dc2cffae03170c14f302b0aaa3c2de3d4051c6ff725f46",
+        "frontend/src/app/app.scss": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frontend/src/app/app.spec.ts": "4eed630ba2fff779f0eddf31665e419acd51dd09fdad5fadcac22168b75d3600",
+        "frontend/src/app/app.ts": "a60c0fa551662a19bb52619c604ac163aa55deb0a3b88219635512005952f9d3",
+        "frontend/src/app/components/confirm-dialog/confirm-dialog.component.ts": "831e34b5bbee1a1956eab5301f03e55f7858f6ba7afaee43bf0b21c786acea43",
+        "frontend/src/app/components/describe-modal/describe-modal.component.ts": "c9302760ebf9616086e6d7f66485ceff6a05a8ac55ba3b3840f448478c705070",
+        "frontend/src/app/components/launch-modal/launch-modal.component.ts": "b7a954a49fac18b5a2f395b72b5e380b3f837db83ae07dcfafffd6bc36fba8d8",
+        "frontend/src/app/components/log-drawer/log-drawer.component.html": "e358de8ebb74d5294ca6383c2f3f6c7131dbf02fb882aa03174547a78211d681",
+        "frontend/src/app/components/log-drawer/log-drawer.component.scss": "c510eab3cb818ccd55a0452610fd05432b6d9e0f05e3f1672c3c3e27aaae3275",
+        "frontend/src/app/components/log-drawer/log-drawer.component.ts": "a78d7121341e133962740109b9e62a7fe77ce05c1d076095a580d6a5aeebc9ec",
+        "frontend/src/app/components/process-card/process-card.component.html": "99ad411922d2c59ab927ec234354ce4f16782eead6262894bb7f416382025367",
+        "frontend/src/app/components/process-card/process-card.component.scss": "1aa791de48707c288cf88eb8b23f1b85e080252ef3fe0ed41db3cfc6de5c21cf",
+        "frontend/src/app/components/process-card/process-card.component.ts": "d2d7270c0d45173dc6f86f610e87d464014d82b70be05f23553f6288225e4a9d",
+        "frontend/src/app/components/process-list/process-list.component.ts": "79de274bebda8cf5344f205eb2906f502a98954008d2590148b045b147245703",
+        "frontend/src/app/components/resource-pie-chart/resource-pie-chart.component.ts": "3f08243fc8258b7f679468908be9c16b31d4ecd179b7c5a61ba21a4e880a67cd",
+        "frontend/src/app/components/startup-modal/startup-modal.component.ts": "af7c44dbb380d73478c42b466df02852a4a8f0e4b9dffa9a755ed88c191643f9",
+        "frontend/src/app/components/toast-container/toast-container.component.ts": "2bb954d615b19ad6a307813b1d5d18cc909ccd90812990b274e711f6d5bcebe7",
+        "frontend/src/app/pages/dashboard/dashboard.component.html": "2e377abef21aa2bc1a213b1d81d4852588f17001ffd50f77bdc468d2419be1a7",
+        "frontend/src/app/pages/dashboard/dashboard.component.scss": "612f7c1c2a8d1a97a59a227a7b2f76d5252d69b8f9250b35910283ac19d332ce",
+        "frontend/src/app/pages/dashboard/dashboard.component.ts": "b47562e938fe97629159cec5bf966d392677d9ee011e28908f336a0d29f261a7",
+        "frontend/src/app/services/pm2.service.ts": "3dd9911832812a9c656c3ee9b5106609bd170bdfba6a2225ed41038d01d0dff8",
+        "frontend/src/app/services/theme.service.ts": "057eb79edc315a42e5f753208f5c6edff46f74c14b1cf84890b42e7f4e1fe2fb",
+        "frontend/src/app/services/toast.service.ts": "db0742f3faeb6b802fee26b3c1ec73472379eabf87098e5bb04764d6a104ec7f",
+        "frontend/src/index.html": "4b94ac3a2fecc6ba8e7e37333dd4390dc3ed8462a95091e7abb35b0b9fc404f6",
+        "frontend/src/main.ts": "77e4808b64ffbe9c02a144587caacfaa7ff8980626e270693dfdf6fa2fb919be",
+        "frontend/src/styles.scss": "b4fe7065a2e96eda220d895bc02268df2039f317a2175de1c037f6d38693d7d8",
+        "frontend/tsconfig.app.json": "ef0951130d6161f26968e606a4a5b7fa0b72d282e638bca68364fa154f9b7966",
+        "frontend/tsconfig.json": "a4810e927e51717b4811de61a9c61c7a903abbcb2862baa6aadc781cbf6f9ed0",
+        "frontend/tsconfig.spec.json": "9b0620adcb42ef8500deee34709d053fedf51b673321f744ee28436735c98fd8",
+        "GUIA_PROXY_REVERSO_IIS.md": "add43b6dc77c763848321c21e35db442837d5aaadb36d34fa629a5203b652ff2",
+        "imgs/favicon.ico": "842a63e4d8a62be944422123a2887792333f550992f955c05b318bda1f3e457f",
+        "imgs/images.png": "8058d024373f9e88bd855070362372cfbca03615ae5d7c54ff17a7c8dfa65b8a",
+        "package-lock.json": "72d3a47d9c1f0911d6bf7556c700932926ae5d698b55ceee218e3b0510674352",
+        "package.json": "fe47922b3dd0f3d17e41cb61c7b948e08522fbc60ce86fa9b8bd4e1e09d07ebf",
+        "public/3rdpartylicenses.txt": "b3c1cf7503919a653082b48006130d9a1cb4e4e1d3ba9a720dc5a1d33872130d",
+        "public/browser/chunk-DCWUX3JO.js": "43683ee08499491d9216458bb3eae0982c85ba7a3c7430f6f969542335de8dab",
+        "public/browser/chunk-LXO6JD7W.js": "a530bcc748dff62b0923599221a4420777fe74d29e9314e9c98358142cb50a43",
+        "public/browser/chunk-M4AQOIIR.js": "bce63caa76b9ea0e531dc01cd7a795f48b44ec0d2e181a0832ea42942eba25d2",
+        "public/browser/chunk-MLMGL4QO.js": "15a122fabddd8c56ba0a60a9cb6401c630ecf586a15d38ef3c4bbfaf333f3bad",
+        "public/browser/chunk-ZD5RYRD5.js": "9dbd65c83dab170dc9073206dd4ef5c57139e6d6f66adf0356bd42f9cfd68d9c",
+        "public/browser/favicon.ico": "842a63e4d8a62be944422123a2887792333f550992f955c05b318bda1f3e457f",
+        "public/browser/images.png": "8058d024373f9e88bd855070362372cfbca03615ae5d7c54ff17a7c8dfa65b8a",
+        "public/browser/index.html": "9ce08e7cdd0a6b6a4d89c9d49995d0a7b1492fbadf5d18ed03a2f3ebe19e34eb",
+        "public/browser/main-6WOHC2UY.js": "2dc22c91a3be1e084525ce86748edd92f5f078fe3863093eb5ed203cb2da65c5",
+        "public/browser/styles-TVP7XQAR.css": "a13137433cb7bff1f7b985c7c442ff3e257dde091837dcfbb47148d9cc106ae3",
+        "public/prerendered-routes.json": "a79ddcc8a115190e9c19479ed36914741a7d1db74f0a1153529efc80725505fe",
+        "README.md": "10c00e5e16d22f83c5be0ff7af8a2e78e1b1b43ea5c38ea697f651a9edf1e817",
+        "server.js": "779b1382d5489104c5a9fca7b037defa4c2cdca79dbd368f2f80d41b196625e8",
+        "web.config": "5e2ae413a901e20a05ebe2a929b2a17dde8aecc8adc95deeb9b3a084fcf9da1d"
+      },
+      "pushed": false,
+      "pushedTo": [
+        "prod"
+      ]
+    },
+    {
+      "id": "430fb62f-be84-4869-8937-f53ecc31225e",
+      "date": "2026-09-01T16:09:49.865Z",
+      "message": "update",
+      "changes": {
+        "added": [],
+        "modified": [
+          "frontend/.angular/cache/22.1.6/frontend/angular-compiler.db-lock",
+          "frontend/package.json",
+          "public/browser/index.html"
+        ],
+        "deleted": []
+      },
+      "snapshot": {
+        ".jwignore": "98dc44b6ebde0fa57dda157d70395589ab9d45154f8369685361debe8691191d",
+        "frontend/.angular/cache/22.1.6/frontend/.tsbuildinfo": "ebb2a3afbac7251a5be23f512d287f8cc203b632c8046ad0a0fd82d5cd6e962b",
+        "frontend/.angular/cache/22.1.6/frontend/angular-compiler.db": "fb4b7bf9b08d15959cb162b328ce6eb406842bf803236cc26f03a951a1ccee01",
+        "frontend/.angular/cache/22.1.6/frontend/angular-compiler.db-lock": "f77b5c517b1d6d3488b707f9f6a0bd0377b585ab931f15f92c35e6721d246aa9",
+        "frontend/.editorconfig": "9da1d179fa691e796ec7cb26d719e2308a073594b7c7c77756d1ba4560e295be",
+        "frontend/.gitignore": "ae6d22f040c44292c421a5c0715e28b9330b8c26d9f2bf08c7935374c6147967",
+        "frontend/.prettierrc": "7bbd911f1ad35a68fd6c04d83c101b4ab1d08c1f8008623c056a27070a735532",
+        "frontend/.vscode/extensions.json": "2f13a5bb182525a4150f20e023a17eacb5411eaf6877d60209ac3cea86ab5c85",
+        "frontend/.vscode/launch.json": "0dd378135c3d394a1e07e9c28af48edea54c5690a805de42c7df101d5e195574",
+        "frontend/.vscode/tasks.json": "63d74d916c9875099b559cfaed85a493c9297a7c03805e18132ca383db045895",
+        "frontend/angular.json": "8e56791b51c9a107e114aba1202f48476fc9fc980145a8c7efaea80da916aeb1",
+        "frontend/package-lock.json": "aa4112a9bd58e083d8bde111743f4384dfa889df4531e6682fab331be26fcfed",
+        "frontend/package.json": "3c718e07506058099303700faf9b556513c8b1ced0dca125fc7df0652ee184f1",
+        "frontend/public/favicon.ico": "842a63e4d8a62be944422123a2887792333f550992f955c05b318bda1f3e457f",
+        "frontend/public/images.png": "8058d024373f9e88bd855070362372cfbca03615ae5d7c54ff17a7c8dfa65b8a",
+        "frontend/README.md": "d515c185869ec7f40a51afff566934004eebc9ccc203f0a8e5e9120bd85c4312",
+        "frontend/src/app/app.config.ts": "3f18d2657f55674b94123ab4be664b6b9d55ba688f0d494bdcdd3881c14e319d",
+        "frontend/src/app/app.html": "046500f97ba60f3ee569a75912c8ab2c09ba2cc96b54ec1637f494a71394736c",
+        "frontend/src/app/app.routes.ts": "1cedc0fd9b09372f25dc2cffae03170c14f302b0aaa3c2de3d4051c6ff725f46",
+        "frontend/src/app/app.scss": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "frontend/src/app/app.spec.ts": "4eed630ba2fff779f0eddf31665e419acd51dd09fdad5fadcac22168b75d3600",
+        "frontend/src/app/app.ts": "a60c0fa551662a19bb52619c604ac163aa55deb0a3b88219635512005952f9d3",
+        "frontend/src/app/components/confirm-dialog/confirm-dialog.component.ts": "831e34b5bbee1a1956eab5301f03e55f7858f6ba7afaee43bf0b21c786acea43",
+        "frontend/src/app/components/describe-modal/describe-modal.component.ts": "c9302760ebf9616086e6d7f66485ceff6a05a8ac55ba3b3840f448478c705070",
+        "frontend/src/app/components/launch-modal/launch-modal.component.ts": "b7a954a49fac18b5a2f395b72b5e380b3f837db83ae07dcfafffd6bc36fba8d8",
+        "frontend/src/app/components/log-drawer/log-drawer.component.html": "e358de8ebb74d5294ca6383c2f3f6c7131dbf02fb882aa03174547a78211d681",
+        "frontend/src/app/components/log-drawer/log-drawer.component.scss": "c510eab3cb818ccd55a0452610fd05432b6d9e0f05e3f1672c3c3e27aaae3275",
+        "frontend/src/app/components/log-drawer/log-drawer.component.ts": "a78d7121341e133962740109b9e62a7fe77ce05c1d076095a580d6a5aeebc9ec",
+        "frontend/src/app/components/process-card/process-card.component.html": "99ad411922d2c59ab927ec234354ce4f16782eead6262894bb7f416382025367",
+        "frontend/src/app/components/process-card/process-card.component.scss": "1aa791de48707c288cf88eb8b23f1b85e080252ef3fe0ed41db3cfc6de5c21cf",
+        "frontend/src/app/components/process-card/process-card.component.ts": "d2d7270c0d45173dc6f86f610e87d464014d82b70be05f23553f6288225e4a9d",
+        "frontend/src/app/components/process-list/process-list.component.ts": "79de274bebda8cf5344f205eb2906f502a98954008d2590148b045b147245703",
+        "frontend/src/app/components/resource-pie-chart/resource-pie-chart.component.ts": "3f08243fc8258b7f679468908be9c16b31d4ecd179b7c5a61ba21a4e880a67cd",
+        "frontend/src/app/components/startup-modal/startup-modal.component.ts": "af7c44dbb380d73478c42b466df02852a4a8f0e4b9dffa9a755ed88c191643f9",
+        "frontend/src/app/components/toast-container/toast-container.component.ts": "2bb954d615b19ad6a307813b1d5d18cc909ccd90812990b274e711f6d5bcebe7",
+        "frontend/src/app/pages/dashboard/dashboard.component.html": "2e377abef21aa2bc1a213b1d81d4852588f17001ffd50f77bdc468d2419be1a7",
+        "frontend/src/app/pages/dashboard/dashboard.component.scss": "612f7c1c2a8d1a97a59a227a7b2f76d5252d69b8f9250b35910283ac19d332ce",
+        "frontend/src/app/pages/dashboard/dashboard.component.ts": "b47562e938fe97629159cec5bf966d392677d9ee011e28908f336a0d29f261a7",
+        "frontend/src/app/services/pm2.service.ts": "3dd9911832812a9c656c3ee9b5106609bd170bdfba6a2225ed41038d01d0dff8",
+        "frontend/src/app/services/theme.service.ts": "057eb79edc315a42e5f753208f5c6edff46f74c14b1cf84890b42e7f4e1fe2fb",
+        "frontend/src/app/services/toast.service.ts": "db0742f3faeb6b802fee26b3c1ec73472379eabf87098e5bb04764d6a104ec7f",
+        "frontend/src/index.html": "4b94ac3a2fecc6ba8e7e37333dd4390dc3ed8462a95091e7abb35b0b9fc404f6",
+        "frontend/src/main.ts": "77e4808b64ffbe9c02a144587caacfaa7ff8980626e270693dfdf6fa2fb919be",
+        "frontend/src/styles.scss": "b4fe7065a2e96eda220d895bc02268df2039f317a2175de1c037f6d38693d7d8",
+        "frontend/tsconfig.app.json": "ef0951130d6161f26968e606a4a5b7fa0b72d282e638bca68364fa154f9b7966",
+        "frontend/tsconfig.json": "a4810e927e51717b4811de61a9c61c7a903abbcb2862baa6aadc781cbf6f9ed0",
+        "frontend/tsconfig.spec.json": "9b0620adcb42ef8500deee34709d053fedf51b673321f744ee28436735c98fd8",
+        "GUIA_PROXY_REVERSO_IIS.md": "add43b6dc77c763848321c21e35db442837d5aaadb36d34fa629a5203b652ff2",
+        "imgs/favicon.ico": "842a63e4d8a62be944422123a2887792333f550992f955c05b318bda1f3e457f",
+        "imgs/images.png": "8058d024373f9e88bd855070362372cfbca03615ae5d7c54ff17a7c8dfa65b8a",
+        "package-lock.json": "72d3a47d9c1f0911d6bf7556c700932926ae5d698b55ceee218e3b0510674352",
+        "package.json": "fe47922b3dd0f3d17e41cb61c7b948e08522fbc60ce86fa9b8bd4e1e09d07ebf",
+        "public/3rdpartylicenses.txt": "b3c1cf7503919a653082b48006130d9a1cb4e4e1d3ba9a720dc5a1d33872130d",
+        "public/browser/chunk-DCWUX3JO.js": "43683ee08499491d9216458bb3eae0982c85ba7a3c7430f6f969542335de8dab",
+        "public/browser/chunk-LXO6JD7W.js": "a530bcc748dff62b0923599221a4420777fe74d29e9314e9c98358142cb50a43",
+        "public/browser/chunk-M4AQOIIR.js": "bce63caa76b9ea0e531dc01cd7a795f48b44ec0d2e181a0832ea42942eba25d2",
+        "public/browser/chunk-MLMGL4QO.js": "15a122fabddd8c56ba0a60a9cb6401c630ecf586a15d38ef3c4bbfaf333f3bad",
+        "public/browser/chunk-ZD5RYRD5.js": "9dbd65c83dab170dc9073206dd4ef5c57139e6d6f66adf0356bd42f9cfd68d9c",
+        "public/browser/favicon.ico": "842a63e4d8a62be944422123a2887792333f550992f955c05b318bda1f3e457f",
+        "public/browser/images.png": "8058d024373f9e88bd855070362372cfbca03615ae5d7c54ff17a7c8dfa65b8a",
+        "public/browser/index.html": "13517ceb854bb36017c2bb29787762f4def1e03b5d691f5af47c59badc3facbc",
+        "public/browser/main-6WOHC2UY.js": "2dc22c91a3be1e084525ce86748edd92f5f078fe3863093eb5ed203cb2da65c5",
+        "public/browser/styles-TVP7XQAR.css": "a13137433cb7bff1f7b985c7c442ff3e257dde091837dcfbb47148d9cc106ae3",
+        "public/prerendered-routes.json": "a79ddcc8a115190e9c19479ed36914741a7d1db74f0a1153529efc80725505fe",
+        "README.md": "10c00e5e16d22f83c5be0ff7af8a2e78e1b1b43ea5c38ea697f651a9edf1e817",
+        "server.js": "779b1382d5489104c5a9fca7b037defa4c2cdca79dbd368f2f80d41b196625e8",
+        "web.config": "5e2ae413a901e20a05ebe2a929b2a17dde8aecc8adc95deeb9b3a084fcf9da1d"
+      },
+      "pushed": false,
+      "pushedTo": [
+        "prod"
+      ]
     }
   ],
   "lastPush": {
-    "date": "2026-09-01T12:47:07.079Z",
-    "backupFile": "c:/server/BKP-PM2-GUI-WEB/backup_20260901_094702.tar.gz",
+    "date": "2026-09-01T16:09:59.557Z",
+    "backupFile": "c:/server/BKP-PM2-GUI-WEB/backup_20260901_130955.tar.gz",
     "commitIds": [
-      "79e78a1e-cf9e-4602-8853-698511ac6092"
+      "430fb62f-be84-4869-8937-f53ecc31225e"
     ]
   },
   "lastPushes": {
     "prod": {
-      "date": "2026-09-01T12:47:07.079Z",
-      "backupFile": "c:/server/BKP-PM2-GUI-WEB/backup_20260901_094702.tar.gz",
+      "date": "2026-09-01T16:09:59.557Z",
+      "backupFile": "c:/server/BKP-PM2-GUI-WEB/backup_20260901_130955.tar.gz",
       "commitIds": [
-        "79e78a1e-cf9e-4602-8853-698511ac6092"
+        "430fb62f-be84-4869-8937-f53ecc31225e"
       ]
     }
   }

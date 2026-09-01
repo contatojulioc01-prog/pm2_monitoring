@@ -16,7 +16,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatBadgeModule } from '@angular/material/badge';
 
-import { Pm2Service, Pm2Process, SystemInfo } from '../../services/pm2.service';
+import { Pm2Service, Pm2Process, SystemInfo, SystemMetrics } from '../../services/pm2.service';
 import { ThemeService } from '../../services/theme.service';
 import { ToastService } from '../../services/toast.service';
 import { ProcessCardComponent } from '../../components/process-card/process-card.component';
@@ -26,6 +26,7 @@ import { LogDrawerComponent } from '../../components/log-drawer/log-drawer.compo
 import { DescribeModalComponent } from '../../components/describe-modal/describe-modal.component';
 import { StartupModalComponent } from '../../components/startup-modal/startup-modal.component';
 import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
+import { ResourcePieChartComponent } from '../../components/resource-pie-chart/resource-pie-chart.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -48,6 +49,7 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
     ProcessCardComponent,
     ProcessListComponent,
     LogDrawerComponent,
+    ResourcePieChartComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
@@ -61,6 +63,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // State
   processes = signal<Pm2Process[]>([]);
   systemInfo = signal<SystemInfo | null>(null);
+  systemMetrics = signal<SystemMetrics | null>(null);
   loading = signal(true);
   connected = signal(false);
   searchQuery = signal('');
@@ -105,6 +108,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         const res = JSON.parse(ev.data);
         if (res.success) {
           this.processes.set(res.data);
+          if (res.metrics) {
+            this.systemMetrics.set(res.metrics);
+          }
           this.lastUpdated.set(new Date());
           this.connected.set(true);
           this.loading.set(false);
@@ -124,7 +130,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private loadSystemInfo(): void {
     this.pm2.getSystemInfo().subscribe({
-      next: res => { if (res.success) this.systemInfo.set(res.data!); },
+      next: res => {
+        if (res.success && res.data) {
+          this.systemInfo.set(res.data);
+          if (res.data.metrics) {
+            this.systemMetrics.set(res.data.metrics);
+          }
+        }
+      },
       error: () => {}
     });
   }
@@ -134,6 +147,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: res => {
         if (res.success) {
           this.processes.set(res.data!);
+          if (res.metrics) {
+            this.systemMetrics.set(res.metrics);
+          }
           this.lastUpdated.set(new Date());
         }
       }
@@ -264,9 +280,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   formatMemory(bytes: number): string {
+    return this.formatBytes(bytes);
+  }
+
+  formatBytes(bytes: number | undefined | null): string {
+    if (!bytes || bytes <= 0) return '0 B';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-    return (bytes / 1073741824).toFixed(1) + ' GB';
+    return (bytes / 1073741824).toFixed(2) + ' GB';
+  }
+
+  getResourceLevel(percent: number): 'normal' | 'warning' | 'critical' {
+    if (percent >= 90) return 'critical';
+    if (percent >= 75) return 'warning';
+    return 'normal';
   }
 }

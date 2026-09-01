@@ -1,0 +1,343 @@
+<div class="pm2-shell" [attr.data-theme]="theme.theme()">
+
+  <!-- ══════════════════════════════════ TOPBAR ══════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <div class="logo-icon">
+          <img src="images.png" alt="PM2 Manager Logo" width="32" height="32" />
+        </div>
+        <div class="logo-text">
+          <span class="logo-title">PM2</span>
+          <span class="logo-sub">Manager</span>
+        </div>
+      </div>
+
+      <div class="topbar-title">Dashboard</div>
+    </div>
+
+    <div class="topbar-right">
+      <!-- Connection status -->
+      <div class="status-chip" [class.status-chip--online]="connected()" [class.status-chip--offline]="!connected()">
+        <span class="status-dot-sm"></span>
+        {{ connected() ? 'Conectado' : 'Desconectado' }}
+      </div>
+
+      <!-- System info -->
+      @if (systemInfo()) {
+        <div class="sys-chips">
+          <span class="sys-chip">Node {{ systemInfo()!.nodeVersion }}</span>
+          <span class="sys-chip">PM2 {{ systemInfo()!.pm2Version }}</span>
+          <span class="sys-chip">{{ systemInfo()!.hostname }}</span>
+        </div>
+      }
+
+      <!-- Global actions menu -->
+      <button mat-icon-button [matMenuTriggerFor]="globalMenu" matTooltip="Ações globais" class="topbar-icon-btn">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+
+      <mat-menu #globalMenu="matMenu">
+        <button mat-menu-item (click)="openSave()">
+          <mat-icon>save</mat-icon>
+          <span>pm2 save</span>
+        </button>
+        <button mat-menu-item (click)="openFlush()">
+          <mat-icon>delete_sweep</mat-icon>
+          <span>pm2 flush (limpar logs)</span>
+        </button>
+        <button mat-menu-item (click)="openStartup()">
+          <mat-icon>power_settings_new</mat-icon>
+          <span>pm2 startup</span>
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item (click)="refreshNow()">
+          <mat-icon>refresh</mat-icon>
+          <span>Atualizar agora</span>
+        </button>
+      </mat-menu>
+
+      <!-- Theme toggle -->
+      <button mat-icon-button (click)="toggleTheme()" [matTooltip]="theme.theme() === 'light' ? 'Modo Escuro' : 'Modo Claro'" class="topbar-icon-btn">
+        <mat-icon>{{ theme.theme() === 'light' ? 'dark_mode' : 'light_mode' }}</mat-icon>
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════ CONTENT ═════════════════════════════════ -->
+  <main class="content">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1 class="page-title">Processos (PM2)</h1>
+        <span class="page-subtitle">{{ countTotal() }} processo(s) cadastrado(s)</span>
+      </div>
+
+      <div class="page-header-right">
+        <!-- Search -->
+        <div class="search-box">
+          <mat-icon class="search-icon">search</mat-icon>
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Filtrar processos..."
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+          />
+        </div>
+
+        <!-- View toggle -->
+        <div class="view-toggle">
+          <button
+            class="view-btn"
+            [class.active]="viewMode() === 'cards'"
+            (click)="setView('cards')"
+            matTooltip="Visualização em cards"
+          >
+            <mat-icon>grid_view</mat-icon>
+          </button>
+          <button
+            class="view-btn"
+            [class.active]="viewMode() === 'list'"
+            (click)="setView('list')"
+            matTooltip="Visualização em lista"
+          >
+            <mat-icon>view_list</mat-icon>
+          </button>
+        </div>
+
+        <!-- New App -->
+        <button class="btn-primary" (click)="openLaunch()">
+          <mat-icon>add</mat-icon>
+          Nova App
+        </button>
+      </div>
+    </div>
+
+    <!-- Hardware Resources Monitor (Pie Charts for CPU, RAM, and Storage) -->
+    @if (systemMetrics(); as metrics) {
+      <section class="system-resources-section" aria-label="Monitor de Recursos do Servidor">
+        <div class="system-resources-grid">
+          
+          <!-- CPU Card -->
+          <div class="resource-card" [class.alert]="getResourceLevel(metrics.cpu.usagePercent) === 'warning'" [class.danger]="getResourceLevel(metrics.cpu.usagePercent) === 'critical'">
+            <div class="resource-header">
+              <div class="resource-title-wrapper">
+                <div class="resource-icon-badge resource-icon--cpu">
+                  <mat-icon>memory</mat-icon>
+                </div>
+                <div class="resource-title-group">
+                  <span class="resource-name">Processador (CPU)</span>
+                  <span class="resource-subtitle" [title]="metrics.cpu.model">{{ metrics.cpu.cores }} Núcleos · {{ metrics.cpu.model }}</span>
+                </div>
+              </div>
+              <span class="resource-status-badge" [class]="'badge--' + getResourceLevel(metrics.cpu.usagePercent)">
+                {{ getResourceLevel(metrics.cpu.usagePercent) === 'critical' ? 'Crítico' : (getResourceLevel(metrics.cpu.usagePercent) === 'warning' ? 'Elevado' : 'Normal') }}
+              </span>
+            </div>
+
+            <div class="resource-body">
+              <app-resource-pie-chart
+                [percentage]="metrics.cpu.usagePercent"
+                label="Uso"
+                colorScheme="cyan"
+                id="cpu-chart"
+              />
+
+              <div class="resource-legend">
+                <div class="legend-item">
+                  <div class="legend-dot dot--used-cyan"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Em Uso</span>
+                    <span class="legend-value highlight">{{ metrics.cpu.usagePercent }}%</span>
+                  </div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot dot--free"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Livre / Ocioso</span>
+                    <span class="legend-value">{{ metrics.cpu.freePercent }}%</span>
+                  </div>
+                </div>
+                <div class="legend-sub">
+                  <mat-icon>developer_board</mat-icon>
+                  <span>{{ metrics.cpu.cores }} Núcleos Lógicos</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Memory RAM Card -->
+          <div class="resource-card" [class.alert]="getResourceLevel(metrics.memory.usagePercent) === 'warning'" [class.danger]="getResourceLevel(metrics.memory.usagePercent) === 'critical'">
+            <div class="resource-header">
+              <div class="resource-title-wrapper">
+                <div class="resource-icon-badge resource-icon--ram">
+                  <mat-icon>speed</mat-icon>
+                </div>
+                <div class="resource-title-group">
+                  <span class="resource-name">Memória RAM</span>
+                  <span class="resource-subtitle">Total: {{ formatBytes(metrics.memory.total) }}</span>
+                </div>
+              </div>
+              <span class="resource-status-badge" [class]="'badge--' + getResourceLevel(metrics.memory.usagePercent)">
+                {{ getResourceLevel(metrics.memory.usagePercent) === 'critical' ? 'Crítico' : (getResourceLevel(metrics.memory.usagePercent) === 'warning' ? 'Atenção' : 'Normal') }}
+              </span>
+            </div>
+
+            <div class="resource-body">
+              <app-resource-pie-chart
+                [percentage]="metrics.memory.usagePercent"
+                label="RAM"
+                colorScheme="purple"
+                id="ram-chart"
+              />
+
+              <div class="resource-legend">
+                <div class="legend-item">
+                  <div class="legend-dot dot--used-purple"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Em Uso</span>
+                    <span class="legend-value highlight">{{ formatBytes(metrics.memory.used) }} ({{ metrics.memory.usagePercent }}%)</span>
+                  </div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot dot--free"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Livre / Disp.</span>
+                    <span class="legend-value">{{ formatBytes(metrics.memory.free) }}</span>
+                  </div>
+                </div>
+                <div class="legend-sub">
+                  <mat-icon>tune</mat-icon>
+                  <span>Total do PC: {{ formatBytes(metrics.memory.total) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disk Storage Card -->
+          <div class="resource-card" [class.alert]="getResourceLevel(metrics.disk.usagePercent) === 'warning'" [class.danger]="getResourceLevel(metrics.disk.usagePercent) === 'critical'">
+            <div class="resource-header">
+              <div class="resource-title-wrapper">
+                <div class="resource-icon-badge resource-icon--disk">
+                  <mat-icon>storage</mat-icon>
+                </div>
+                <div class="resource-title-group">
+                  <span class="resource-name">Armazenamento</span>
+                  <span class="resource-subtitle">Unidade {{ metrics.disk.drive }} ({{ formatBytes(metrics.disk.total) }})</span>
+                </div>
+              </div>
+              <span class="resource-status-badge" [class]="'badge--' + getResourceLevel(metrics.disk.usagePercent)">
+                {{ getResourceLevel(metrics.disk.usagePercent) === 'critical' ? 'Crítico' : (getResourceLevel(metrics.disk.usagePercent) === 'warning' ? 'Atenção' : 'Normal') }}
+              </span>
+            </div>
+
+            <div class="resource-body">
+              <app-resource-pie-chart
+                [percentage]="metrics.disk.usagePercent"
+                label="Disco"
+                colorScheme="emerald"
+                id="disk-chart"
+              />
+
+              <div class="resource-legend">
+                <div class="legend-item">
+                  <div class="legend-dot dot--used-emerald"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Espaço Usado</span>
+                    <span class="legend-value highlight">{{ formatBytes(metrics.disk.used) }} ({{ metrics.disk.usagePercent }}%)</span>
+                  </div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot dot--free"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Espaço Livre</span>
+                    <span class="legend-value">{{ formatBytes(metrics.disk.free) }}</span>
+                  </div>
+                </div>
+                <div class="legend-sub">
+                  <mat-icon>dns</mat-icon>
+                  <span>Capacidade: {{ formatBytes(metrics.disk.total) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    }
+
+    <!-- Loading -->
+    @if (loading()) {
+      <div class="loading-container">
+        <mat-progress-spinner mode="indeterminate" diameter="48" />
+        <p>Conectando ao PM2...</p>
+      </div>
+    }
+
+    <!-- Empty state -->
+    @if (!loading() && filtered().length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">terminal</mat-icon>
+        <p class="empty-title">Nenhum processo encontrado</p>
+        <p class="empty-sub">
+          @if (searchQuery()) {
+            Nenhum resultado para "{{ searchQuery() }}"
+          } @else {
+            Inicie um processo com <strong>+ Nova App</strong> ou via <code>pm2 start app.js</code>
+          }
+        </p>
+      </div>
+    }
+
+    <!-- Cards View -->
+    @if (!loading() && viewMode() === 'cards') {
+      <div class="cards-grid">
+        @for (p of filtered(); track p.id) {
+          <app-process-card
+            [process]="p"
+            (onStart)="onStart($event)"
+            (onStop)="onStop($event)"
+            (onRestart)="onRestart($event)"
+            (onReload)="onReload($event)"
+            (onDelete)="onDelete($event)"
+            (onLogs)="onViewLogs($event)"
+            (onDescribe)="onDescribe($event)"
+          />
+        }
+      </div>
+    }
+
+    <!-- List View -->
+    @if (!loading() && viewMode() === 'list') {
+      <app-process-list
+        [processes]="filtered()"
+        (onStart)="onStart($event)"
+        (onStop)="onStop($event)"
+        (onRestart)="onRestart($event)"
+        (onReload)="onReload($event)"
+        (onDelete)="onDelete($event)"
+        (onLogs)="onViewLogs($event)"
+        (onDescribe)="onDescribe($event)"
+      />
+    }
+
+    <!-- Last update -->
+    @if (lastUpdated()) {
+      <div class="last-update">
+        Última atualização: {{ lastUpdated() | date:'dd/MM/yyyy HH:mm:ss' }}
+        &nbsp;·&nbsp; Atualização automática via SSE
+      </div>
+    }
+  </main>
+
+  <!-- Log Drawer -->
+  @if (logDrawerOpen()) {
+    <app-log-drawer
+      [processId]="logDrawerProcessId()!"
+      [processName]="logDrawerProcessName()"
+      (close)="closeLogDrawer()"
+    />
+  }
+</div>

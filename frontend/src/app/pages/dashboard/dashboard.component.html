@@ -115,45 +115,158 @@
       </div>
     </div>
 
-    <!-- Stats Row -->
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-icon stat-icon--total">
-          <mat-icon>dns</mat-icon>
+    <!-- Hardware Resources Monitor (Pie Charts for CPU, RAM, and Storage) -->
+    @if (systemMetrics(); as metrics) {
+      <section class="system-resources-section" aria-label="Monitor de Recursos do Servidor">
+        <div class="system-resources-grid">
+          
+          <!-- CPU Card -->
+          <div class="resource-card" [class.alert]="getResourceLevel(metrics.cpu.usagePercent) === 'warning'" [class.danger]="getResourceLevel(metrics.cpu.usagePercent) === 'critical'">
+            <div class="resource-header">
+              <div class="resource-title-wrapper">
+                <div class="resource-icon-badge resource-icon--cpu">
+                  <mat-icon>memory</mat-icon>
+                </div>
+                <div class="resource-title-group">
+                  <span class="resource-name">Processador (CPU)</span>
+                  <span class="resource-subtitle" [title]="metrics.cpu.model">{{ metrics.cpu.cores }} Núcleos · {{ metrics.cpu.model }}</span>
+                </div>
+              </div>
+              <span class="resource-status-badge" [class]="'badge--' + getResourceLevel(metrics.cpu.usagePercent)">
+                {{ getResourceLevel(metrics.cpu.usagePercent) === 'critical' ? 'Crítico' : (getResourceLevel(metrics.cpu.usagePercent) === 'warning' ? 'Elevado' : 'Normal') }}
+              </span>
+            </div>
+
+            <div class="resource-body">
+              <app-resource-pie-chart
+                [percentage]="metrics.cpu.usagePercent"
+                label="Uso"
+                colorScheme="cyan"
+                id="cpu-chart"
+              />
+
+              <div class="resource-legend">
+                <div class="legend-item">
+                  <div class="legend-dot dot--used-cyan"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Em Uso</span>
+                    <span class="legend-value highlight">{{ metrics.cpu.usagePercent }}%</span>
+                  </div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot dot--free"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Livre / Ocioso</span>
+                    <span class="legend-value">{{ metrics.cpu.freePercent }}%</span>
+                  </div>
+                </div>
+                <div class="legend-sub">
+                  <mat-icon>developer_board</mat-icon>
+                  <span>{{ metrics.cpu.cores }} Núcleos Lógicos</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Memory RAM Card -->
+          <div class="resource-card" [class.alert]="getResourceLevel(metrics.memory.usagePercent) === 'warning'" [class.danger]="getResourceLevel(metrics.memory.usagePercent) === 'critical'">
+            <div class="resource-header">
+              <div class="resource-title-wrapper">
+                <div class="resource-icon-badge resource-icon--ram">
+                  <mat-icon>speed</mat-icon>
+                </div>
+                <div class="resource-title-group">
+                  <span class="resource-name">Memória RAM</span>
+                  <span class="resource-subtitle">Total: {{ formatBytes(metrics.memory.total) }}</span>
+                </div>
+              </div>
+              <span class="resource-status-badge" [class]="'badge--' + getResourceLevel(metrics.memory.usagePercent)">
+                {{ getResourceLevel(metrics.memory.usagePercent) === 'critical' ? 'Crítico' : (getResourceLevel(metrics.memory.usagePercent) === 'warning' ? 'Atenção' : 'Normal') }}
+              </span>
+            </div>
+
+            <div class="resource-body">
+              <app-resource-pie-chart
+                [percentage]="metrics.memory.usagePercent"
+                label="RAM"
+                colorScheme="purple"
+                id="ram-chart"
+              />
+
+              <div class="resource-legend">
+                <div class="legend-item">
+                  <div class="legend-dot dot--used-purple"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Em Uso</span>
+                    <span class="legend-value highlight">{{ formatBytes(metrics.memory.used) }} ({{ metrics.memory.usagePercent }}%)</span>
+                  </div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot dot--free"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Livre / Disp.</span>
+                    <span class="legend-value">{{ formatBytes(metrics.memory.free) }}</span>
+                  </div>
+                </div>
+                <div class="legend-sub">
+                  <mat-icon>tune</mat-icon>
+                  <span>Total do PC: {{ formatBytes(metrics.memory.total) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disk Storage Card -->
+          <div class="resource-card" [class.alert]="getResourceLevel(metrics.disk.usagePercent) === 'warning'" [class.danger]="getResourceLevel(metrics.disk.usagePercent) === 'critical'">
+            <div class="resource-header">
+              <div class="resource-title-wrapper">
+                <div class="resource-icon-badge resource-icon--disk">
+                  <mat-icon>storage</mat-icon>
+                </div>
+                <div class="resource-title-group">
+                  <span class="resource-name">Armazenamento</span>
+                  <span class="resource-subtitle">Unidade {{ metrics.disk.drive }} ({{ formatBytes(metrics.disk.total) }})</span>
+                </div>
+              </div>
+              <span class="resource-status-badge" [class]="'badge--' + getResourceLevel(metrics.disk.usagePercent)">
+                {{ getResourceLevel(metrics.disk.usagePercent) === 'critical' ? 'Crítico' : (getResourceLevel(metrics.disk.usagePercent) === 'warning' ? 'Atenção' : 'Normal') }}
+              </span>
+            </div>
+
+            <div class="resource-body">
+              <app-resource-pie-chart
+                [percentage]="metrics.disk.usagePercent"
+                label="Disco"
+                colorScheme="emerald"
+                id="disk-chart"
+              />
+
+              <div class="resource-legend">
+                <div class="legend-item">
+                  <div class="legend-dot dot--used-emerald"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Espaço Usado</span>
+                    <span class="legend-value highlight">{{ formatBytes(metrics.disk.used) }} ({{ metrics.disk.usagePercent }}%)</span>
+                  </div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot dot--free"></div>
+                  <div class="legend-info">
+                    <span class="legend-label">Espaço Livre</span>
+                    <span class="legend-value">{{ formatBytes(metrics.disk.free) }}</span>
+                  </div>
+                </div>
+                <div class="legend-sub">
+                  <mat-icon>dns</mat-icon>
+                  <span>Capacidade: {{ formatBytes(metrics.disk.total) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ countTotal() }}</div>
-          <div class="stat-label">Total</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon--online">
-          <mat-icon>check_circle</mat-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value stat-value--online">{{ countOnline() }}</div>
-          <div class="stat-label">Online</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon--stopped">
-          <mat-icon>stop_circle</mat-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value stat-value--stopped">{{ countStopped() }}</div>
-          <div class="stat-label">Parado</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon--errored">
-          <mat-icon>error</mat-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value stat-value--errored">{{ countErrored() }}</div>
-          <div class="stat-label">Erro</div>
-        </div>
-      </div>
-    </div>
+      </section>
+    }
 
     <!-- Loading -->
     @if (loading()) {

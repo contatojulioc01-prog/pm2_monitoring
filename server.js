@@ -7,6 +7,7 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
+const os      = require('os');
 const cors    = require('cors');
 
 const app  = express();
@@ -19,6 +20,89 @@ app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public', 'browser')));
+
+// ─── Hardware Metrics Tracker ──────────────────────────────────────────────────
+let lastCpuTimes = null;
+
+function getCpuUsage() {
+  const cpus = os.cpus();
+  if (!cpus || cpus.length === 0) return { usagePercent: 0, freePercent: 100, cores: 1, model: 'Unknown' };
+
+  let totalUser = 0, totalNice = 0, totalSys = 0, totalIdle = 0, totalIrq = 0;
+  for (const cpu of cpus) {
+    totalUser += cpu.times.user;
+    totalNice += cpu.times.nice;
+    totalSys += cpu.times.sys;
+    totalIdle += cpu.times.idle;
+    totalIrq += cpu.times.irq;
+  }
+  const total = totalUser + totalNice + totalSys + totalIdle + totalIrq;
+  const idle = totalIdle;
+
+  let usagePercent = 0;
+  if (lastCpuTimes) {
+    const diffTotal = total - lastCpuTimes.total;
+    const diffIdle = idle - lastCpuTimes.idle;
+    if (diffTotal > 0) {
+      usagePercent = Math.max(0, Math.min(100, parseFloat((((diffTotal - diffIdle) / diffTotal) * 100).toFixed(1))));
+    }
+  }
+  lastCpuTimes = { total, idle };
+
+  return {
+    usagePercent,
+    freePercent: parseFloat((100 - usagePercent).toFixed(1)),
+    cores: cpus.length,
+    model: (cpus[0]?.model || 'CPU').trim()
+  };
+}
+
+// Inicializa a primeira medição de CPU logo na inicialização
+getCpuUsage();
+
+function getMemoryUsage() {
+  const total = os.totalmem();
+  const free = os.freemem();
+  const used = Math.max(0, total - free);
+  const usagePercent = total > 0 ? parseFloat(((used / total) * 100).toFixed(1)) : 0;
+  return {
+    total,
+    free,
+    used,
+    usagePercent
+  };
+}
+
+function getDiskUsage() {
+  try {
+    const rootPath = process.platform === 'win32' ? (process.cwd().split(path.sep)[0] || 'C:') + '\\' : '/';
+    if (fs.statfsSync) {
+      const stats = fs.statfsSync(rootPath);
+      const total = stats.bsize * stats.blocks;
+      const free = stats.bsize * stats.bavail;
+      const used = Math.max(0, total - free);
+      const usagePercent = total > 0 ? parseFloat(((used / total) * 100).toFixed(1)) : 0;
+      return {
+        total,
+        free,
+        used,
+        usagePercent,
+        drive: rootPath
+      };
+    }
+  } catch (e) {
+    // fallback em caso de erro no disco
+  }
+  return { total: 0, free: 0, used: 0, usagePercent: 0, drive: 'N/A' };
+}
+
+function getSystemMetrics() {
+  return {
+    cpu: getCpuUsage(),
+    memory: getMemoryUsage(),
+    disk: getDiskUsage()
+  };
+}
 
 // ─── PM2 Persistent Connection ──────────────────────────────────────────────────
 const pm2 = require('pm2');
@@ -105,7 +189,7 @@ app.get('/api/processes', async (req, res) => {
   res.setHeader('Expires', '0');
   try {
     const list = await listPM2();
-    res.json({ success: true, data: list.map(formatProcess) });
+    res.json({ success: true, data: list.map(formatProcess), metrics: getSystemMetrics() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -126,11 +210,12 @@ function startSseInterval() {
   sseInterval = setInterval(async () => {
     try {
       const list = await listPM2();
-      broadcastSSE(JSON.stringify({ success: true, data: list.map(formatProcess) }));
+      const metrics = getSystemMetrics();
+      broadcastSSE(JSON.stringify({ success: true, data: list.map(formatProcess), metrics }));
     } catch(err) {
       broadcastSSE(JSON.stringify({ success: false, error: err.message }));
     }
-  }, 2000); // 2 segundos, mas roda UMA VEZ só para todos
+  }, 2000); // 2 segundos, atualiza processos e métricas de hardware
 }
 
 function stopSseInterval() {
@@ -142,7 +227,7 @@ function stopSseInterval() {
 
 /**
  * GET /api/processes/stream
- * Server-Sent Events (SSE) — Lista os processos em tempo real.
+ * Server-Sent Events (SSE) — Lista os processos e consumo de hardware em tempo real.
  */
 app.get('/api/processes/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -156,7 +241,7 @@ app.get('/api/processes/stream', (req, res) => {
 
   // Envia status inicial imediatamente para quem acabou de conectar
   listPM2()
-    .then(list => res.write(`data: ${JSON.stringify({ success: true, data: list.map(formatProcess) })}\n\n`))
+    .then(list => res.write(`data: ${JSON.stringify({ success: true, data: list.map(formatProcess), metrics: getSystemMetrics() })}\n\n`))
     .catch(err => res.write(`data: ${JSON.stringify({ success: false, error: err.message })}\n\n`));
 
   req.on('close', () => {
@@ -167,7 +252,7 @@ app.get('/api/processes/stream', (req, res) => {
 
 /**
  * GET /api/system
- * Informações do servidor e versão do PM2.
+ * Informações do servidor, versão do PM2 e métricas do PC.
  */
 app.get('/api/system', async (req, res) => {
   try {
@@ -180,12 +265,13 @@ app.get('/api/system', async (req, res) => {
         nodeVersion: process.version,
         platform: process.platform,
         pm2Version,
-        hostname: require('os').hostname(),
+        hostname: os.hostname(),
         uptime: process.uptime(),
         serverTime: new Date().toISOString(),
-        totalMemory: require('os').totalmem(),
-        freeMemory: require('os').freemem(),
-        cpus: require('os').cpus().length,
+        totalMemory: os.totalmem(),
+        freeMemory: os.freemem(),
+        cpus: os.cpus().length,
+        metrics: getSystemMetrics()
       },
     });
   } catch (err) {

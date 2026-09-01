@@ -22,9 +22,38 @@ export interface Pm2Process {
   namespace: string;
 }
 
+export interface CpuMetrics {
+  usagePercent: number;
+  freePercent: number;
+  cores: number;
+  model: string;
+}
+
+export interface MemoryMetrics {
+  total: number;
+  free: number;
+  used: number;
+  usagePercent: number;
+}
+
+export interface DiskMetrics {
+  total: number;
+  free: number;
+  used: number;
+  usagePercent: number;
+  drive: string;
+}
+
+export interface SystemMetrics {
+  cpu: CpuMetrics;
+  memory: MemoryMetrics;
+  disk: DiskMetrics;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
+  metrics?: SystemMetrics;
   error?: string;
   message?: string;
 }
@@ -39,6 +68,7 @@ export interface SystemInfo {
   totalMemory: number;
   freeMemory: number;
   cpus: number;
+  metrics?: SystemMetrics;
 }
 
 @Injectable({ providedIn: 'root' })
