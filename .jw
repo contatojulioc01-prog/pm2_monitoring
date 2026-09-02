@@ -8,7 +8,7 @@
   ],
   "backup": {
     "enabled": true,
-    "folder": "BKP-PM2-GUI-WEB",
+    "folder": "BKS/BKP-PM2-GUI-WEB",
     "format": "tar.gz"
   },
   "manifestFile": "jw-deploys.json",
@@ -29,7 +29,7 @@
   },
   "pm2ByServer": {
     "dev": {
-      "startArguments": "server.js --name PM2-Manager"
+      "process": 16
     },
     "prod": {
       "process": 10
