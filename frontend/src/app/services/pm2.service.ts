@@ -147,10 +147,14 @@ export class Pm2Service {
   }
 
   streamProcesses(): EventSource {
-    return new EventSource(`${this.API}/processes/stream`);
+    const token = localStorage.getItem('dc_pm2_sso_token') || '';
+    const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+    return new EventSource(`${this.API}/processes/stream${qs}`);
   }
 
   streamLogs(id: number | string): EventSource {
-    return new EventSource(`${this.API}/processes/${id}/logs/stream`);
+    const token = localStorage.getItem('dc_pm2_sso_token') || '';
+    const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+    return new EventSource(`${this.API}/processes/${id}/logs/stream${qs}`);
   }
 }

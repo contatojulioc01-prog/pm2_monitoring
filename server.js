@@ -9,6 +9,59 @@ const path    = require('path');
 const fs      = require('fs');
 const os      = require('os');
 const cors    = require('cors');
+const crypto  = require('crypto');
+
+// ─── Carregar .env se existir ──────────────────────────────────────────────────
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    const envContent = fs.readFileSync(envPath, 'utf-8');
+    envContent.split(/\r?\n/).forEach(line => {
+      line = line.trim();
+      if (!line || line.startsWith('#')) return;
+      const eqIdx = line.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = line.slice(0, eqIdx).trim();
+        const val = line.slice(eqIdx + 1).trim();
+        if (process.env[key] === undefined) {
+          process.env[key] = val;
+        }
+      }
+    });
+  } catch (e) {
+    console.warn('Aviso: Não foi possível carregar o arquivo .env:', e.message);
+  }
+}
+
+// ─── SSO Config ────────────────────────────────────────────────────────────────
+const SSO_URL        = (process.env.SSO_URL || 'http://192.168.13.244:7000').replace(/\/$/, '');
+const SSO_API_KEY    = process.env.SSO_API_KEY || '';
+const SSO_PORTAL_URL = process.env.SSO_PORTAL_URL || 'http://192.168.13.244:7000';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'pm2_gui_sso_secret_key_change_in_prod';
+
+function signSessionToken(userData) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const exp = Date.now() + 24 * 60 * 60 * 1000; // 24 horas de validade
+  const payload = Buffer.from(JSON.stringify({ user: userData, exp })).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [header, payload, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(`${header}.${payload}`).digest('base64url');
+  if (signature !== expectedSig) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
+    if (data.exp && data.exp < Date.now()) return null;
+    return data.user;
+  } catch (e) {
+    return null;
+  }
+}
 
 const app  = express();
 const PORT = process.env.PORT || 6767;
@@ -174,6 +227,43 @@ function findProc(list, idOrName) {
            (p.pm2_env && p.pm2_env.name === idOrName)
   );
 }
+
+function requireAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  let token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  // Suporte a token via query parameter (para EventSource / SSE)
+  if (!token && req.query && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: 'Acesso não autorizado. Autenticação SSO obrigatória.'
+    });
+  }
+
+  const user = verifySessionToken(token);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Sessão inválida ou expirada. Acesse novamente via Portal SSO.'
+    });
+  }
+
+  req.user = user;
+  next();
+}
+
+// ─── Proteção Global de API via SSO ───────────────────────────────────────────
+app.use('/api', (req, res, next) => {
+  // Rotas /api/auth/* permanecem acessíveis para realização de login e checagem
+  if (req.path.startsWith('/auth')) {
+    return next();
+  }
+  return requireAuth(req, res, next);
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROTAS — PROCESSOS
@@ -605,6 +695,111 @@ app.post('/api/startup', (req, res) => {
     output: output.trim() || 'Nenhuma saída gerada.',
     isWindows,
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROTAS — AUTENTICAÇÃO SSO
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/auth/config
+ * Retorna configurações públicas do SSO (URL e status de ativação).
+ */
+app.get('/api/auth/config', (req, res) => {
+  res.json({
+    success: true,
+    ssoEnabled: !!SSO_API_KEY,
+    ssoUrl: SSO_URL,
+    portalUrl: SSO_PORTAL_URL
+  });
+});
+
+/**
+ * POST /api/auth/sso-login
+ * Valida o ticket de autenticação temporário junto ao servidor SSO.
+ * Utiliza o header X-Api-Key e repassa os dados do usuário.
+ */
+app.post('/api/auth/sso-login', async (req, res) => {
+  const { ticket, token } = req.body || {};
+  const incomingTicket = ticket || token;
+
+  if (!incomingTicket) {
+    return res.status(400).json({
+      success: false,
+      error: 'Ticket de autenticação não fornecido.'
+    });
+  }
+
+  if (!SSO_API_KEY) {
+    console.warn('⚠ SSO_API_KEY não configurada no .env');
+  }
+
+  try {
+    const ssoResponse = await fetch(`${SSO_URL}/api/apikey/validate-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': SSO_API_KEY
+      },
+      body: JSON.stringify({ token: incomingTicket })
+    });
+
+    const ssoData = await ssoResponse.json().catch(() => null);
+
+    if (!ssoResponse.ok || !ssoData || !ssoData.success) {
+      const errorMsg = ssoData?.message || ssoData?.error || `Falha ao validar token com o SSO (HTTP ${ssoResponse.status})`;
+      return res.status(ssoResponse.status >= 400 && ssoResponse.status < 500 ? ssoResponse.status : 401).json({
+        success: false,
+        error: errorMsg
+      });
+    }
+
+    const userData = ssoData.data;
+    const sessionToken = signSessionToken(userData);
+
+    return res.json({
+      success: true,
+      token: sessionToken,
+      user: userData
+    });
+  } catch (err) {
+    console.error('Erro ao conectar ao serviço SSO:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro de comunicação com o servidor SSO: ' + err.message
+    });
+  }
+});
+
+/**
+ * GET /api/auth/me
+ * Retorna os dados do usuário a partir do token de sessão ativo.
+ */
+app.get('/api/auth/me', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Token de autenticação não fornecido.' });
+  }
+
+  const user = verifySessionToken(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Sessão inválida ou expirada.' });
+  }
+
+  return res.json({
+    success: true,
+    user
+  });
+});
+
+/**
+ * POST /api/auth/logout
+ * Encerra a sessão local.
+ */
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true, message: 'Sessão encerrada com sucesso.' });
 });
 
 // ─── SPA Fallback ─────────────────────────────────────────────────────────────

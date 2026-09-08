@@ -167,18 +167,35 @@ module.exports = {
 
 ---
 
+## 🔐 Integração SSO (Single Sign-On)
+
+O PM2 Web GUI possui integração nativa com o **Portal SSO Doce Brinquedo**.
+
+### Variáveis de Ambiente (`.env`)
+
+Crie ou edite o arquivo `.env` na raiz do projeto (use [.env.example](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/.env.example) como base):
+
+```ini
+PORT=6767
+SSO_URL=http://192.168.13.244:7000
+SSO_API_KEY=dc_live_sua_chave_aqui
+SSO_PORTAL_URL=http://192.168.13.244:7000
+SESSION_SECRET=sua_chave_secreta_aqui
+```
+
+### Como Funciona o Fluxo SSO:
+1. O usuário acessa o sistema pelo Portal SSO ou via link com `?ticket=...`.
+2. O Frontend Angular captura o ticket temporário e limpa a URL imediatamente (`history.replaceState`).
+3. O Backend valida o ticket junto ao SSO através do endpoint `POST /api/apikey/validate-token` com a chave `X-Api-Key`.
+4. Uma sessão local assinada é criada e os dados do usuário (nome, email, avatar, departamento e permissões) são exibidos no cabeçalho do painel.
+
+---
+
 ## 🔒 Segurança
 
-A aplicação não possui autenticação própria. Para proteger o acesso:
-
-**Opção 1: Windows Authentication no IIS**
-- IIS Manager → site → Authentication → Disable Anonymous, Enable Windows Auth
-
-**Opção 2: IP Restriction**
-- IIS Manager → site → IP Address and Domain Restrictions
-
-**Opção 3: Basic Auth com módulo IIS**
-- Habilitar Basic Authentication no IIS (requer HTTPS)
+- **X-Api-Key protegida no Backend**: As credenciais de integração com o SSO nunca são expostas ao navegador.
+- **Tokens de Sessão Assinados**: HMAC-SHA256 para integridade e validação de expiração.
+- **Proteção adicional no IIS**: Opcionalmente, utilize Windows Authentication ou restrições de IP no IIS Manager.
 
 ---
 
@@ -186,16 +203,19 @@ A aplicação não possui autenticação própria. Para proteger o acesso:
 
 ```
 pm2-gui-web/
-├── server.js          ← Backend Node.js/Express
+├── server.js               ← Backend Node.js/Express + SSO API
 ├── package.json
-├── web.config         ← Configuração IIS (ARR reverse proxy)
+├── .env.example            ← Template de configuração de ambiente
+├── web.config              ← Configuração IIS (ARR reverse proxy)
 ├── README.md
-└── public/
-    ├── index.html     ← SPA (dashboard)
-    ├── css/
-    │   └── style.css  ← Design system dark mode
-    └── js/
-        └── app.js     ← Frontend (fetch, polling, UI)
+├── docs/
+│   └── GUIA_INTEGRACAO_SSO.md ← Especificação técnica do SSO
+├── frontend/               ← SPA Angular 22 (Material + Signals)
+│   └── src/app/
+│       ├── services/auth.service.ts       ← Estado e handoff do SSO
+│       ├── interceptors/auth.interceptor.ts ← Anexo de token Bearer
+│       └── pages/dashboard/               ← Dashboard com perfil de usuário
+└── public/                 ← Build de produção compilado (servido pelo Node.js)
 ```
 
 ---

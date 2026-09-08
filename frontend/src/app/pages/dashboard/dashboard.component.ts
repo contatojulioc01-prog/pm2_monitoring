@@ -19,6 +19,7 @@ import { MatBadgeModule } from '@angular/material/badge';
 import { Pm2Service, Pm2Process, SystemInfo, SystemMetrics } from '../../services/pm2.service';
 import { ThemeService } from '../../services/theme.service';
 import { ToastService } from '../../services/toast.service';
+import { AuthService } from '../../services/auth.service';
 import { ProcessCardComponent } from '../../components/process-card/process-card.component';
 import { ProcessListComponent } from '../../components/process-list/process-list.component';
 import { LaunchModalComponent } from '../../components/launch-modal/launch-modal.component';
@@ -58,6 +59,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private pm2 = inject(Pm2Service);
   private toast = inject(ToastService);
   public theme = inject(ThemeService);
+  public auth = inject(AuthService);
   private dialog = inject(MatDialog);
 
   // State
@@ -72,6 +74,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   logDrawerOpen = signal(false);
   logDrawerProcessId = signal<number | string | null>(null);
   logDrawerProcessName = signal('');
+  avatarError = signal(false);
 
   private sse: EventSource | null = null;
 
@@ -91,9 +94,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   countErrored = computed(() => this.processes().filter(p => p.status === 'errored').length);
   countTotal   = computed(() => this.processes().length);
 
-  ngOnInit(): void {
-    this.loadSystemInfo();
-    this.connectSSE();
+  async ngOnInit(): Promise<void> {
+    const isAuth = await this.auth.init();
+    if (isAuth) {
+      this.loadSystemInfo();
+      this.connectSSE();
+    } else {
+      this.loading.set(false);
+    }
   }
 
   ngOnDestroy(): void {
@@ -101,6 +109,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private connectSSE(): void {
+    if (!this.auth.isAuthenticated()) return;
+
+    this.sse?.close();
     this.sse = this.pm2.streamProcesses();
 
     this.sse.addEventListener('message', (ev) => {
@@ -120,15 +131,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.sse.addEventListener('error', () => {
       this.connected.set(false);
-      // Retry after 5s
-      setTimeout(() => {
-        this.sse?.close();
-        this.connectSSE();
-      }, 5000);
+      if (this.auth.isAuthenticated()) {
+        setTimeout(() => {
+          this.sse?.close();
+          if (this.auth.isAuthenticated()) {
+            this.connectSSE();
+          }
+        }, 5000);
+      }
     });
   }
 
+  handleLogout(): void {
+    this.sse?.close();
+    this.processes.set([]);
+    this.systemInfo.set(null);
+    this.connected.set(false);
+    this.auth.logout();
+  }
+
   private loadSystemInfo(): void {
+    if (!this.auth.isAuthenticated()) return;
+
     this.pm2.getSystemInfo().subscribe({
       next: res => {
         if (res.success && res.data) {
