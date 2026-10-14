@@ -116,26 +116,16 @@ cd ..
 
 ---
 
-### 2. Configuração do Arquivo `.env`
+### 2. Configuração de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto (ou dentro de `backend/`) baseado no [.env.example](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/.env.example):
+Crie o arquivo local `.env` a partir do modelo [.env.example](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/.env.example):
 
-```ini
-# Porta interna do servidor
-PORT=6767
-HOST=0.0.0.0
-
-# Integração com Portal SSO Doce Brinquedo
-SSO_URL=http://192.168.13.244:7000
-SSO_API_KEY=dc_live_sua_chave_aqui
-SSO_PORTAL_URL=http://192.168.13.244:7000
-
-# Chave secreta de sessão interna (HMAC-SHA256)
-SESSION_SECRET=pm2_gui_sso_secret_key_change_in_production
+```powershell
+Copy-Item .env.example .env
 ```
 
-> [!NOTE]
-> Se as variáveis do `SSO_*` não forem preenchidas, a aplicação roda em **Modo Local (Bypass)**, liberando o acesso para ambiente de desenvolvimento.
+> [!IMPORTANT]
+> O arquivo `.env` contém parâmetros locais e confidenciais e é protegido pelo `.gitignore`. Preencha os valores necessários diretamente no seu ambiente local conforme o arquivo de exemplo.
 
 ---
 
