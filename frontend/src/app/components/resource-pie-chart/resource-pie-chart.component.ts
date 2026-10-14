@@ -97,7 +97,7 @@ import { CommonModule } from '@angular/common';
     .pie-meter {
       fill: none;
       stroke-linecap: round;
-      transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.3s ease;
+      transition: stroke-dashoffset 0.35s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.2s ease;
     }
 
     .pie-center {

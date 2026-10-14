@@ -54,6 +54,7 @@ export class AuthService {
   // State Signals
   currentUser = signal<SsoUser | null>(null);
   token = signal<string | null>(null);
+  ssoAvatar = signal<string | null>(null);
   isLoading = signal<boolean>(false);
   isInitializing = signal<boolean>(true);
   authError = signal<string | null>(null);
@@ -61,6 +62,16 @@ export class AuthService {
 
   // Computed
   isAuthenticated = computed(() => !!this.currentUser());
+
+  avatarUrl = computed(() => {
+    const direct = this.ssoAvatar();
+    if (direct) return direct;
+    const user = this.currentUser();
+    if (user?.avatar) {
+      return this.normalizeAvatarUrl(user.avatar);
+    }
+    return null;
+  });
 
   userRoles = computed(() => {
     const user = this.currentUser();
@@ -75,9 +86,14 @@ export class AuthService {
   });
 
   private get API(): string {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/pm2-manager')) {
+      return '/pm2-manager/api';
+    }
     const base = document.querySelector('base')?.getAttribute('href') ?? '/';
     return base.replace(/\/$/, '') + '/api';
   }
+
+  private initPromise: Promise<boolean> | null = null;
 
   /**
    * Inicializa o fluxo de autenticação SSO:
@@ -85,28 +101,124 @@ export class AuthService {
    * 2. Sanitiza a barra de navegação sem poluir a URL.
    * 3. Valida com o backend ou restaura a sessão ativa localmente.
    */
-  async init(): Promise<boolean> {
-    this.isInitializing.set(true);
-    this.authError.set(null);
-    this.loadSsoConfig();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const ticket = urlParams.get('ticket') || urlParams.get('token');
-
-    if (ticket) {
-      // Remove o parâmetro de ticket da URL imediatamente por segurança e estética
-      const cleanUrl = window.location.pathname + (window.location.hash || '');
-      window.history.replaceState({}, document.title, cleanUrl);
-
-      const success = await this.loginWithTicket(ticket);
-      this.isInitializing.set(false);
-      return success;
+  init(): Promise<boolean> {
+    if (this.initPromise) {
+      return this.initPromise;
     }
 
-    // Se não há ticket na URL, tenta restaurar a sessão existente no localStorage
-    const success = await this.restoreSession();
-    this.isInitializing.set(false);
-    return success;
+    this.initPromise = (async () => {
+      this.isInitializing.set(true);
+      this.authError.set(null);
+      this.loadSsoConfig();
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const ticket = urlParams.get('ticket') || urlParams.get('token');
+
+      if (ticket) {
+        // Remove o parâmetro de ticket da URL imediatamente por segurança e estética
+        const cleanUrl = window.location.pathname + (window.location.hash || '');
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        const success = await this.loginWithTicket(ticket);
+        if (success) {
+          this.fetchSsoAvatar();
+        }
+        this.isInitializing.set(false);
+        return success;
+      }
+
+      // Se não há ticket na URL, tenta restaurar a sessão existente no localStorage
+      const success = await this.restoreSession();
+      if (success) {
+        this.fetchSsoAvatar();
+      }
+      this.isInitializing.set(false);
+      return success;
+    })();
+
+    return this.initPromise;
+  }
+
+  /**
+   * Normaliza a URL do avatar para garantir que caminhos relativos (/uploads/...)
+   * apontem para o host SSO http://192.168.13.244
+   */
+  normalizeAvatarUrl(avatar?: string | null): string | null {
+    if (!avatar) return null;
+    let trimmed = String(avatar).trim().replace(/\\/g, '/');
+    if (!trimmed) return null;
+
+    if (/^(https?:\/\/|data:image\/)/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return `http://192.168.13.244${cleanPath}`;
+  }
+
+  /**
+   * Puxa a foto de perfil diretamente do endpoint SSO http://192.168.13.244/api/auth/me (propriedade "avatar")
+   */
+  async fetchSsoAvatar(): Promise<string | null> {
+    // 1. Tenta buscar diretamente do endpoint SSO http://192.168.13.244/api/auth/me
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      };
+      const token = this.token();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('http://192.168.13.244/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+        headers
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data) {
+          const rawAvatar = data.avatar ?? data.data?.avatar ?? data.user?.avatar ?? data.data?.user?.avatar;
+          if (rawAvatar && typeof rawAvatar === 'string') {
+            const normalized = this.normalizeAvatarUrl(rawAvatar);
+            if (normalized) {
+              this.ssoAvatar.set(normalized);
+              this.updateCurrentUserAvatar(normalized);
+              return normalized;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Falha direta (ex: restrição CORS em desenvolvimento local)
+    }
+
+    // 2. Se a chamada direta pelo navegador falhar, busca via rota de backend /api/auth/sso-avatar
+    try {
+      const res = await this.http.get<{ success: boolean; avatar?: string }>(`${this.API}/auth/sso-avatar`).toPromise();
+      if (res && res.success && res.avatar) {
+        const normalized = this.normalizeAvatarUrl(res.avatar);
+        if (normalized) {
+          this.ssoAvatar.set(normalized);
+          this.updateCurrentUserAvatar(normalized);
+          return normalized;
+        }
+      }
+    } catch (e) { }
+
+    return null;
+  }
+
+  private updateCurrentUserAvatar(avatarUrl: string): void {
+    const user = this.currentUser();
+    if (user && user.avatar !== avatarUrl) {
+      const updated = { ...user, avatar: avatarUrl };
+      this.currentUser.set(updated);
+      try {
+        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(updated));
+      } catch (e) { }
+    }
   }
 
   /**
@@ -148,13 +260,23 @@ export class AuthService {
 
       if (storedToken && storedUser) {
         this.token.set(storedToken);
-        const parsedUser = JSON.parse(storedUser);
+        const parsedUser: SsoUser = JSON.parse(storedUser);
+        if (parsedUser.avatar) {
+          parsedUser.avatar = this.normalizeAvatarUrl(parsedUser.avatar);
+          this.ssoAvatar.set(parsedUser.avatar);
+        }
+        this.currentUser.set(parsedUser);
 
         // Valida ativamente a validade do token no backend
         const res = await this.http.get<{ success: boolean; user: SsoUser }>(`${this.API}/auth/me`).toPromise();
         if (res && res.success && res.user) {
+          if (res.user.avatar) {
+            res.user.avatar = this.normalizeAvatarUrl(res.user.avatar);
+            this.ssoAvatar.set(res.user.avatar);
+          }
           this.currentUser.set(res.user);
           localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(res.user));
+          this.fetchSsoAvatar();
           return true;
         } else {
           this.clearSession();
@@ -173,17 +295,23 @@ export class AuthService {
   }
 
   private setSession(token: string, user: SsoUser): void {
+    if (user.avatar) {
+      user.avatar = this.normalizeAvatarUrl(user.avatar);
+      this.ssoAvatar.set(user.avatar);
+    }
     this.token.set(token);
     this.currentUser.set(user);
     try {
       localStorage.setItem(STORAGE_TOKEN_KEY, token);
       localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user));
     } catch (e) { }
+    this.fetchSsoAvatar();
   }
 
   private clearSession(): void {
     this.token.set(null);
     this.currentUser.set(null);
+    this.ssoAvatar.set(null);
     try {
       localStorage.removeItem(STORAGE_TOKEN_KEY);
       localStorage.removeItem(STORAGE_USER_KEY);

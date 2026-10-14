@@ -44,6 +44,28 @@ export interface DiskMetrics {
   drive: string;
 }
 
+export interface MonitoringSession {
+  id: string;
+  processId: number;
+  processName: string;
+  durationMinutes: number;
+  startedAt: string;
+  endsAt: string;
+  status: 'active' | 'completed' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MonitoringMetricPoint {
+  id: number;
+  sessionId: string;
+  processId: number;
+  processName: string;
+  cpu: number;
+  memory: number;
+  capturedAt: string;
+}
+
 export interface SystemMetrics {
   cpu: CpuMetrics;
   memory: MemoryMetrics;
@@ -81,6 +103,9 @@ export class Pm2Service {
    * Ex: base href = "/"             → API = "/api"
    */
   private get API(): string {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/pm2-manager')) {
+      return '/pm2-manager/api';
+    }
     const base = document.querySelector('base')?.getAttribute('href') ?? '/';
     return base.replace(/\/$/, '') + '/api';
   }
@@ -156,5 +181,30 @@ export class Pm2Service {
     const token = localStorage.getItem('dc_pm2_sso_token') || '';
     const qs = token ? `?token=${encodeURIComponent(token)}` : '';
     return new EventSource(`${this.API}/processes/${id}/logs/stream${qs}`);
+  }
+
+  startProcessMonitor(data: {
+    processId: number | string;
+    processName: string;
+    durationMinutes?: number;
+    customHours?: number;
+  }): Observable<ApiResponse<MonitoringSession>> {
+    return this.http.post<ApiResponse<MonitoringSession>>(`${this.API}/process-monitor/start`, data);
+  }
+
+  stopProcessMonitor(sessionId: string): Observable<ApiResponse<void>> {
+    return this.http.post<ApiResponse<void>>(`${this.API}/process-monitor/${sessionId}/stop`, {});
+  }
+
+  getActiveProcessMonitors(): Observable<ApiResponse<MonitoringSession[]>> {
+    return this.http.get<ApiResponse<MonitoringSession[]>>(`${this.API}/process-monitor/active`);
+  }
+
+  getProcessMonitorSession(sessionId: string): Observable<ApiResponse<{ session: MonitoringSession; metrics: MonitoringMetricPoint[] }>> {
+    return this.http.get<ApiResponse<{ session: MonitoringSession; metrics: MonitoringMetricPoint[] }>>(`${this.API}/process-monitor/session/${sessionId}`);
+  }
+
+  getProcessMonitorHistory(processName: string): Observable<ApiResponse<MonitoringSession[]>> {
+    return this.http.get<ApiResponse<MonitoringSession[]>>(`${this.API}/process-monitor/process/${encodeURIComponent(processName)}`);
   }
 }

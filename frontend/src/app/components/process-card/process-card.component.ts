@@ -4,17 +4,19 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatDividerModule } from '@angular/material/divider';
 import { Pm2Process } from '../../services/pm2.service';
 
 @Component({
   selector: 'app-process-card',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatIconModule, MatTooltipModule, MatMenuModule],
+  imports: [CommonModule, MatButtonModule, MatIconModule, MatTooltipModule, MatMenuModule, MatDividerModule],
   templateUrl: './process-card.component.html',
   styleUrl: './process-card.component.scss'
 })
 export class ProcessCardComponent {
   @Input() process!: Pm2Process;
+  @Input() isMonitored: boolean = false;
   @Output() onStart    = new EventEmitter<Pm2Process>();
   @Output() onStop     = new EventEmitter<Pm2Process>();
   @Output() onRestart  = new EventEmitter<Pm2Process>();
@@ -22,6 +24,7 @@ export class ProcessCardComponent {
   @Output() onDelete   = new EventEmitter<Pm2Process>();
   @Output() onLogs     = new EventEmitter<Pm2Process>();
   @Output() onDescribe = new EventEmitter<Pm2Process>();
+  @Output() onMonitor  = new EventEmitter<Pm2Process>();
 
   get statusLabel(): string {
     switch (this.process.status) {

@@ -16,7 +16,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatBadgeModule } from '@angular/material/badge';
 
-import { Pm2Service, Pm2Process, SystemInfo, SystemMetrics } from '../../services/pm2.service';
+import { Pm2Service, Pm2Process, SystemInfo, SystemMetrics, MonitoringSession } from '../../services/pm2.service';
 import { ThemeService } from '../../services/theme.service';
 import { ToastService } from '../../services/toast.service';
 import { AuthService } from '../../services/auth.service';
@@ -25,6 +25,7 @@ import { ProcessListComponent } from '../../components/process-list/process-list
 import { LaunchModalComponent } from '../../components/launch-modal/launch-modal.component';
 import { LogDrawerComponent } from '../../components/log-drawer/log-drawer.component';
 import { DescribeModalComponent } from '../../components/describe-modal/describe-modal.component';
+import { ProcessMonitorModalComponent } from '../../components/process-monitor-modal/process-monitor-modal.component';
 import { StartupModalComponent } from '../../components/startup-modal/startup-modal.component';
 import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
 import { ResourcePieChartComponent } from '../../components/resource-pie-chart/resource-pie-chart.component';
@@ -66,6 +67,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   processes = signal<Pm2Process[]>([]);
   systemInfo = signal<SystemInfo | null>(null);
   systemMetrics = signal<SystemMetrics | null>(null);
+  activeMonitors = signal<MonitoringSession[]>([]);
   loading = signal(true);
   connected = signal(false);
   searchQuery = signal('');
@@ -78,15 +80,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private sse: EventSource | null = null;
 
+  statusFilter = signal<'all' | 'online' | 'stopped' | 'errored'>('all');
+
   // Computed
   filtered = computed(() => {
     const q = this.searchQuery().toLowerCase();
-    return this.processes().filter(p =>
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      String(p.id).includes(q) ||
-      p.status.toLowerCase().includes(q)
-    );
+    const sf = this.statusFilter();
+    return this.processes().filter(p => {
+      const matchQuery = !q ||
+        p.name.toLowerCase().includes(q) ||
+        String(p.id).includes(q) ||
+        p.status.toLowerCase().includes(q);
+      const matchStatus = sf === 'all' || p.status === sf;
+      return matchQuery && matchStatus;
+    });
   });
 
   countOnline  = computed(() => this.processes().filter(p => p.status === 'online').length);
@@ -94,10 +101,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   countErrored = computed(() => this.processes().filter(p => p.status === 'errored').length);
   countTotal   = computed(() => this.processes().length);
 
+  private onVisibilityChange = () => {
+    if (document.hidden) {
+      // Quando o usuário não está olhando a tela, desconecta o SSE imediatamente para cessar o monitoramento
+      this.disconnectSSE();
+    } else {
+      // Ao retornar para a aba, reconecta e atualiza os dados
+      if (this.auth.isAuthenticated()) {
+        this.refreshNow();
+        this.loadActiveMonitors();
+        this.connectSSE();
+      }
+    }
+  };
+
   async ngOnInit(): Promise<void> {
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
     const isAuth = await this.auth.init();
     if (isAuth) {
+      this.refreshNow();
       this.loadSystemInfo();
+      this.loadActiveMonitors();
       this.connectSSE();
     } else {
       this.loading.set(false);
@@ -105,13 +129,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.sse?.close();
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.disconnectSSE();
+  }
+
+  private disconnectSSE(): void {
+    if (this.sse) {
+      this.sse.close();
+      this.sse = null;
+      this.connected.set(false);
+    }
   }
 
   private connectSSE(): void {
-    if (!this.auth.isAuthenticated()) return;
+    if (!this.auth.isAuthenticated() || document.hidden) return;
 
-    this.sse?.close();
+    this.disconnectSSE();
     this.sse = this.pm2.streamProcesses();
 
     this.sse.addEventListener('message', (ev) => {
@@ -131,19 +164,46 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.sse.addEventListener('error', () => {
       this.connected.set(false);
-      if (this.auth.isAuthenticated()) {
+      if (this.auth.isAuthenticated() && !document.hidden) {
         setTimeout(() => {
-          this.sse?.close();
-          if (this.auth.isAuthenticated()) {
+          this.disconnectSSE();
+          if (this.auth.isAuthenticated() && !document.hidden) {
             this.connectSSE();
           }
-        }, 5000);
+        }, 1500);
       }
     });
   }
 
+  openProcessMonitor(p: Pm2Process): void {
+    const ref = this.dialog.open(ProcessMonitorModalComponent, {
+      data: { process: p },
+      width: '740px',
+      maxWidth: '95vw',
+      disableClose: true
+    });
+    ref.afterClosed().subscribe(() => {
+      this.loadActiveMonitors();
+    });
+  }
+
+  loadActiveMonitors(): void {
+    if (!this.auth.isAuthenticated()) return;
+    this.pm2.getActiveProcessMonitors().subscribe({
+      next: res => {
+        if (res.success && res.data) {
+          this.activeMonitors.set(res.data);
+        }
+      }
+    });
+  }
+
+  isProcessMonitored(p: Pm2Process): boolean {
+    return this.activeMonitors().some(m => m.processName === p.name || m.processId === p.id);
+  }
+
   handleLogout(): void {
-    this.sse?.close();
+    this.disconnectSSE();
     this.processes.set([]);
     this.systemInfo.set(null);
     this.connected.set(false);
@@ -175,7 +235,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.systemMetrics.set(res.metrics);
           }
           this.lastUpdated.set(new Date());
+          this.connected.set(true);
         }
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
       }
     });
   }
@@ -183,7 +248,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // ── Actions ──
   onStart(p: Pm2Process): void {
     this.pm2.startProcess(p.id).subscribe({
-      next: () => this.toast.success(`✅ ${p.name} iniciado`),
+      next: () => {
+        this.toast.success(`✅ ${p.name} iniciado`);
+        this.refreshNow();
+      },
       error: () => this.toast.error(`Falha ao iniciar ${p.name}`)
     });
   }
@@ -195,7 +263,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
       this.pm2.stopProcess(p.id).subscribe({
-        next: () => this.toast.success(`⏹ ${p.name} parado`),
+        next: () => {
+          this.toast.success(`⏹ ${p.name} parado`);
+          this.refreshNow();
+        },
         error: () => this.toast.error(`Falha ao parar ${p.name}`)
       });
     });
@@ -203,14 +274,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onRestart(p: Pm2Process): void {
     this.pm2.restartProcess(p.id).subscribe({
-      next: () => this.toast.success(`🔄 ${p.name} reiniciado`),
+      next: () => {
+        this.toast.success(`🔄 ${p.name} reiniciado`);
+        this.refreshNow();
+      },
       error: () => this.toast.error(`Falha ao reiniciar ${p.name}`)
     });
   }
 
   onReload(p: Pm2Process): void {
     this.pm2.reloadProcess(p.id).subscribe({
-      next: () => this.toast.success(`♻️ ${p.name} recarregado (gracioso)`),
+      next: () => {
+        this.toast.success(`♻️ ${p.name} recarregado (gracioso)`);
+        this.refreshNow();
+      },
       error: () => this.toast.error(`Falha ao recarregar ${p.name}`)
     });
   }
@@ -222,7 +299,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
       this.pm2.deleteProcess(p.id).subscribe({
-        next: () => this.toast.success(`🗑 ${p.name} removido`),
+        next: () => {
+          this.toast.success(`🗑 ${p.name} removido`);
+          this.refreshNow();
+        },
         error: () => this.toast.error(`Falha ao remover ${p.name}`)
       });
     });
@@ -255,7 +335,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     ref.afterClosed().subscribe(result => {
       if (result) {
         this.pm2.launch(result).subscribe({
-          next: res => this.toast.success(res.message ?? 'Processo iniciado'),
+          next: res => {
+            this.toast.success(res.message ?? 'Processo iniciado');
+            this.refreshNow();
+          },
           error: () => this.toast.error('Falha ao iniciar processo')
         });
       }
@@ -276,7 +359,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     ref.afterClosed().subscribe(ok => {
       if (!ok) return;
       this.pm2.flush().subscribe({
-        next: res => this.toast.success(res.message ?? 'Logs limpos'),
+        next: res => {
+          this.toast.success(res.message ?? 'Logs limpos');
+          this.refreshNow();
+        },
         error: () => this.toast.error('Falha ao limpar logs')
       });
     });
@@ -297,6 +383,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   setView(mode: 'cards' | 'list'): void {
     this.viewMode.set(mode);
+  }
+
+  setStatusFilter(status: 'all' | 'online' | 'stopped' | 'errored'): void {
+    this.statusFilter.set(status);
+  }
+
+  clearFilters(): void {
+    this.searchQuery.set('');
+    this.statusFilter.set('all');
   }
 
   toggleTheme(): void {

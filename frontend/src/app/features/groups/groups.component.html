@@ -1,0 +1,146 @@
+<div class="groups-page">
+  
+  <!-- Header da Página -->
+  <div class="page-header">
+    <div class="header-titles">
+      <div class="title-with-badge">
+        <div class="page-icon-badge">
+          <mat-icon>shield</mat-icon>
+        </div>
+        <div>
+          <h1 class="page-title">Grupos de Segurança (AD & Locais)</h1>
+          <p class="page-subtitle">{{ filteredGroups().length }} grupo(s) cadastrado(s)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de Filtros -->
+    <div class="toolbar-actions">
+      <div class="search-input-wrap">
+        <mat-icon class="search-icon">search</mat-icon>
+        <input type="text" 
+               placeholder="Buscar por nome ou descrição..." 
+               [ngModel]="searchQuery()" 
+               (ngModelChange)="searchQuery.set($event)" />
+        <button class="clear-btn" *ngIf="searchQuery()" (click)="searchQuery.set('')">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="server-select-wrap">
+        <mat-icon class="select-icon">dns</mat-icon>
+        <select class="custom-native-select" (change)="onServerChange($event)">
+          <option value="">Todos os Servidores</option>
+          @for (srv of allServers(); track srv.id) {
+            <option [value]="srv.id" [selected]="srv.id === selectedServerId()">
+              {{ srv.name }}
+            </option>
+          }
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cards Grid de Grupos -->
+  <div class="groups-grid">
+    @if (loading()) {
+      <div class="loading-state col-span-full">
+        <div class="spinner-small"></div>
+        <span>Carregando grupos...</span>
+      </div>
+    } @else if (filteredGroups().length === 0) {
+      <div class="empty-state col-span-full">
+        <mat-icon class="empty-icon">group_off</mat-icon>
+        <h3>Nenhum grupo encontrado</h3>
+        <p>Ajuste os termos da busca ou selecione outro servidor.</p>
+      </div>
+    } @else {
+      @for (g of filteredGroups(); track g.id) {
+        <div class="group-card card">
+          <div class="group-top">
+            <div class="group-icon-wrap">
+              <mat-icon>shield</mat-icon>
+            </div>
+            <span class="server-pill">
+              <mat-icon>dns</mat-icon>
+              {{ getServerName(g.serverId) }}
+            </span>
+          </div>
+
+          <div class="group-body">
+            <h3 class="group-name">{{ g.name }}</h3>
+            <p class="group-desc">{{ g.description || 'Grupo importado do Active Directory / Windows Local' }}</p>
+          </div>
+
+          <div class="group-footer">
+            <button class="btn btn-members" (click)="verMembros(g)" matTooltip="Ver usuários deste grupo">
+              <mat-icon>people</mat-icon>
+              <span>Ver Membros</span>
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </div>
+
+</div>
+
+<!-- MODAL: Membros do Grupo (Cumprindo Angular Modal Layout) -->
+@if (showGroupModal()) {
+  <div class="modal-backdrop">
+    <div class="modal-wrapper max-w-lg">
+      
+      <!-- Header Fixo -->
+      <div class="modal-header">
+        <div class="header-main">
+          <div class="header-icon-badge">
+            <span class="material-icons">shield</span>
+          </div>
+          <div class="header-title-box">
+            <h2>Membros de {{ selectedGroup()?.name }}</h2>
+            <p>{{ selectedGroup()?.membersData?.length || 0 }} usuário(s) membro(s) deste grupo</p>
+          </div>
+        </div>
+        <button type="button" class="close-btn" (click)="closeGroupModal()" title="Fechar">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+
+      <!-- Corpo Rolável -->
+      <div class="modal-body">
+        @if (loadingGroupDetails()) {
+          <div class="loading-state">
+            <div class="spinner-small"></div>
+            <span>Carregando membros...</span>
+          </div>
+        } @else if (!selectedGroup()?.membersData || selectedGroup()?.membersData?.length === 0) {
+          <div class="empty-state-modal">
+            <mat-icon>person_off</mat-icon>
+            <p>Nenhum membro listado neste grupo.</p>
+          </div>
+        } @else {
+          <div class="members-list">
+            @for (m of selectedGroup()?.membersData; track m.id) {
+              <div class="member-item">
+                <div class="avatar-circle">
+                  <span>{{ (m.name || m.username || 'U').charAt(0).toUpperCase() }}</span>
+                </div>
+                <div class="member-info">
+                  <span class="member-name">{{ m.name || m.username }}</span>
+                  <span class="member-user mono">{{ m.username }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Rodapé Fixo -->
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeGroupModal()">Fechar</button>
+      </div>
+
+    </div>
+  </div>
+}
+

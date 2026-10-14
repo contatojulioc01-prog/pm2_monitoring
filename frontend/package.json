@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build --base-href /pm2-manager/",
-    "build:prod": "ng build --base-href /pm2-manager/",
+    "start": "ng serve --host 0.0.0.0 --proxy-config proxy.conf.json",
+    "build": "ng build --base-href /",
+    "build:prod": "ng build --base-href /",
+    "build:subpath": "ng build --base-href /pm2-manager/",
     "build:local": "ng build --base-href /",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
@@ -22,8 +23,11 @@
     "@angular/material": "^22.1.4",
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@angular/build": "^22.1.6",

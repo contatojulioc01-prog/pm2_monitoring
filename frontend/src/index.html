@@ -3,19 +3,25 @@
 <head>
   <meta charset="utf-8">
   <title>PM2 Manager</title>
-  <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <script>
-    // Normaliza subcaminho garantindo barra final (ex: /pm2-manager -> /pm2-manager/)
-    // Necessário para proxy reverso no IIS (ARR) funcionar corretamente
+    // Detecção dinâmica de base href (funciona por porta direta ex: :6767 ou por subcaminho /pm2-manager/)
     (function() {
       var p = window.location.pathname;
       if (p.length > 1 && !p.endsWith('/') && !p.split('/').pop().includes('.')) {
         window.location.replace(p + '/' + window.location.search + window.location.hash);
+        return;
+      }
+      var isPm2 = p.startsWith('/pm2-manager');
+      var baseHref = isPm2 ? '/pm2-manager/' : '/';
+      var baseTag = document.querySelector('base');
+      if (baseTag) {
+        baseTag.setAttribute('href', baseHref);
       }
     })();
   </script>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
