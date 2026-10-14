@@ -1,228 +1,245 @@
-# PM2 Web GUI
+# DC — PM2 Web GUI & Gerenciador de Permissões
 
-Interface web moderna para gerenciar processos PM2, projetada para implantação no **IIS do Windows Server 2019**.
+<p align="center">
+  <strong>Painel de Gestão e Monitoramento de Processos PM2 com Autenticação SSO, Multi-Servidores e Controle de Acesso</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Versão-2.0.0-blue.svg" alt="Versão 2.0.0" />
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg" alt="Node.js" />
+  <img src="https://img.shields.io/badge/PM2-%5E7.0.3-orange.svg" alt="PM2" />
+  <img src="https://img.shields.io/badge/Angular-18%2B-red.svg" alt="Angular" />
+  <img src="https://img.shields.io/badge/Banco-SQLite3-lightgrey.svg" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Plataforma-Windows%20Server%20%2F%20IIS-0078D7.svg" alt="IIS" />
+</p>
 
 ---
 
-## 🚀 Início Rápido (desenvolvimento local)
+## 📖 Visão Geral
+
+O **DC — PM2 Web GUI** é uma solução completa para controle operacional, governança e monitoramento de aplicações gerenciadas pelo **PM2**. Projetada especialmente para o ambiente corporativo da **Doce Brinquedo**, a aplicação atua tanto de forma autônoma quanto integrada ao **Portal SSO**, permitindo gerenciar instâncias locais e servidores remotos com controle granular de permissões por usuário.
+
+---
+
+## ✨ Principais Funcionalidades
+
+- 📊 **Monitoramento Contínuo e Histórico em Tempo Real**:
+  - Renderização segundo a segundo de consumo de CPU e Memória (RAM).
+  - Coleta e gravação automática em segundo plano via SQLite (`pm2-recorder`), garantindo dados históricos mesmo sem usuários ativos na tela.
+  - Alertas visuais de sobrecarga de recursos e restarts anômalos.
+
+- ⚙️ **Gerenciamento Completo de Processos**:
+  - Ações diretas: Iniciar (`start`), Parar (`stop`), Reiniciar (`restart`), Reload gracioso (`reload`) e Remover (`delete`).
+  - Limpeza rápida de logs (`flush`) e persistência de estado do PM2 (`pm2 save`).
+  - Suporte a salvar/configurar inicialização automática no boot do Windows (`pm2 startup`).
+
+- 📑 **Visualizador de Logs em Tempo Real**:
+  - Drawer lateral para visualização de `stdout` e `stderr` com auto-scroll, busca por texto e separação de erros.
+
+- 🖥️ **Arquitetura Multi-Servidores (Agentes Remotos)**:
+  - Cadastro e monitoramento centralizado de múltiplos servidores ou instâncias remotas com sincronização segura via token.
+
+- 📂 **Organização por Pastas e Grupos**:
+  - Categorização lógica das aplicações por setor, ambiente ou departamento (ex.: APIs, Automações, Coletores, BI).
+
+- 👥 **Controle Granular de Usuários e Permissões**:
+  - Gerenciamento de usuários locais e sincronizados via SSO.
+  - Restrição de permissões operacionais (exibir, editar, criar, deletar processos e acessar pastas específicas).
+
+- 🔐 **Integração Nativa com Portal SSO (Single Sign-On)**:
+  - Autenticação sem atrito via ticket JWT (`?ticket=...`).
+  - Validação backend-to-backend segura com `X-Api-Key` (credenciais nunca expostas no navegador).
+  - Modo bypass local para desenvolvimento offline.
+
+- 🔀 **Compatibilidade Universal com IIS e Subcaminhos**:
+  - Injeção dinâmica de `<base href>` no backend Express.
+  - Funciona na raiz (`http://servidor/`) ou sob subcaminhos reversos (`http://docebrinquedo.local/pm2-manager/` ou `/doce-manager/`).
+  - Prevenção ativa contra erros de loop de proxy (`HTTP 400.605 - Max-Forwards limit`).
+
+---
+
+## 🗂️ Estrutura do Repositório
+
+```
+DC --- PM2-GUI-WEB/
+├── backend/
+│   ├── src/
+│   │   ├── data/             # Banco SQLite (db.sqlite)
+│   │   ├── middleware/       # Autenticação e controle de acesso
+│   │   ├── routes/           # Rotas REST (pm2, auth, servers, folders, users, groups)
+│   │   ├── utils/            # Gravador histórico (pm2-recorder), sync e banco
+│   │   └── server.js         # Servidor unificado Express + PM2 + Static Files
+│   └── public/               # Build compilado do Frontend Angular servido pelo Express
+├── frontend/                 # Aplicação SPA Angular (Material + Signals)
+│   ├── src/app/
+│   │   ├── components/       # Modais, cards, gráficos e drawers
+│   │   ├── pages/            # Dashboard principal e views de administração
+│   │   └── services/         # Consumo de API, SSE e estado de autenticação
+│   ├── angular.json
+│   └── package.json
+├── docs/                     # Manuais técnicos detalhados
+│   ├── GUIA_INTEGRACAO_SSO.md
+│   └── GUIA_PROXY_REVERSO_IIS.md
+├── .env.example              # Modelo de variáveis de ambiente
+├── .gitignore                # Regras de exclusão Git (node_modules, logs, .env)
+├── package.json              # Orquestrador de scripts e dependências do backend
+├── server.js                 # Ponto de entrada raiz (delegado para backend/src/server.js)
+└── web.config                # Configuração do IIS para Proxy Reverso (ARR)
+```
+
+---
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+- **Node.js** LTS (versão `>= 18.0.0`)
+- **PM2** instalado globalmente:
+  ```powershell
+  npm install -g pm2
+  ```
+
+---
+
+### 1. Instalação das Dependências
+
+Instale as dependências da raiz (backend) e do frontend:
 
 ```powershell
-# 1. Instalar dependências
-cd pm2-gui-web
+# Dependências do backend e orquestrador
 npm install
 
-# 2. Iniciar servidor
-node server.js
-
-# 3. Acessar no browser
-# http://localhost:6767
+# Dependências do frontend Angular
+cd frontend
+npm install
+cd ..
 ```
 
 ---
 
-## 🖥️ Deploy no IIS (Windows Server 2019)
+### 2. Configuração do Arquivo `.env`
 
-### Pré-requisitos no servidor
+Crie um arquivo `.env` na raiz do projeto (ou dentro de `backend/`) baseado no [.env.example](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/.env.example):
 
-| Componente | Download / Instalação |
-|-----------|----------------------|
-| Node.js LTS | https://nodejs.org |
-| PM2 (global) | `npm install -g pm2` |
-| IIS URL Rewrite Module | https://www.iis.net/downloads/microsoft/url-rewrite |
-| Application Request Routing (ARR) | https://www.iis.net/downloads/microsoft/application-request-routing |
+```ini
+# Porta interna do servidor
+PORT=6767
+HOST=0.0.0.0
+
+# Integração com Portal SSO Doce Brinquedo
+SSO_URL=http://192.168.13.244:7000
+SSO_API_KEY=dc_live_sua_chave_aqui
+SSO_PORTAL_URL=http://192.168.13.244:7000
+
+# Chave secreta de sessão interna (HMAC-SHA256)
+SESSION_SECRET=pm2_gui_sso_secret_key_change_in_production
+```
+
+> [!NOTE]
+> Se as variáveis do `SSO_*` não forem preenchidas, a aplicação roda em **Modo Local (Bypass)**, liberando o acesso para ambiente de desenvolvimento.
 
 ---
 
-### Passo a passo
+### 3. Execução em Desenvolvimento
 
-#### 1. Copiar os arquivos
+Para rodar backend e frontend simultaneamente com hot-reload:
 
 ```powershell
-# Copiar a pasta pm2-gui-web para o servidor
-# Exemplo: C:\inetpub\wwwroot\pm2-gui\
-
-# Instalar dependências na pasta de destino
-cd C:\inetpub\wwwroot\pm2-gui
-npm install --production
+npm run dev
 ```
 
-#### 2. Registrar como serviço PM2
+- **Backend**: `http://localhost:6767`
+- **Frontend Angular (Dev Server)**: `http://localhost:4200` (com proxy reverso para a porta `6767` configurado via `proxy.conf.json`)
+
+---
+
+### 4. Build de Produção
+
+Compile o frontend Angular. Os arquivos finais serão gerados automaticamente dentro de `backend/public`:
 
 ```powershell
-# Iniciar a aplicação com PM2
+npm run build
+```
+
+---
+
+### 5. Execução em Produção
+
+Com o build gerado, basta iniciar o backend (que servirá a API e o SPA compilado em uma única porta):
+
+```powershell
+# Execução direta
+npm start
+
+# Ou via PM2 no Windows Server
 pm2 start server.js --name "pm2-gui-web" --node-args="--max-old-space-size=256"
-
-# Salvar para sobreviver ao reboot
 pm2 save
-
-# Configurar PM2 para iniciar automaticamente com o Windows
-pm2 startup windows
-# Execute o comando gerado como Administrador
-```
-
-#### 3. Configurar o IIS
-
-1. Abra o **IIS Manager**
-2. Habilite o **proxy reverso no ARR**:
-   - Clique no servidor (nó raiz) → **Application Request Routing Cache**
-   - **Server Proxy Settings** → marque **Enable proxy** → Apply
-3. Crie um novo site:
-   - **Sites** → Botão direito → **Add Website**
-   - Site name: `PM2 GUI`
-   - Physical path: `C:\inetpub\wwwroot\pm2-gui`
-   - Binding: porta `80` (ou `443` com certificado SSL)
-4. **Application Pool**:
-   - Selecione o pool do site → **Advanced Settings**
-   - `.NET CLR Version` → **No Managed Code**
-   - `Idle Time-out` → `0` (sem timeout)
-5. **Permissões**:
-   - Pasta do projeto → Botão direito → Propriedades → Segurança
-   - Adicionar `IIS_IUSRS` com permissão **Leitura e Execução**
-
-#### 4. Verificar
-
-```powershell
-# Verificar que o Node.js está rodando
-pm2 status
-
-# Testar diretamente na porta do Node
-curl http://localhost:6767/api/processes
-
-# Acessar pelo IIS
-# http://SEU-SERVIDOR/
 ```
 
 ---
 
-## 🔀 Configuração de Proxy Reverso em Subcaminho no IIS
+## 🖥️ Publicação no IIS (Windows Server)
 
-Para publicar o **PM2 Web GUI** sob um subcaminho do seu site principal (por exemplo, `http://docebrinquedo.local/pm2-manager`), a regra do IIS deve direcionar a requisição para a **porta interna do Node.js** (por exemplo, `6767`).
+Para publicar no IIS utilizando o **Application Request Routing (ARR)** e **URL Rewrite Module**:
 
-> ⚠️ **IMPORTANTE (Evitando Erro HTTP 400.605 - Max-Forwards limit)**:
-> Se o IIS tentar fazer rewrite apontando para a mesma porta do próprio site IIS (ex: IIS escutando em `8081` e fazendo rewrite para `http://localhost:8081`), o IIS entrará em um **loop infinito de proxy** e retornará `HTTP 400.605`.
-> 
-> **Solução**: O Node.js roda na porta interna `6767` e o IIS redireciona para `http://localhost:6767/{R:1}`.
-
-### Regra de Reescrita no Site Pai (`docebrinquedo.local`):
+### A. Site Dedicado (ex.: porta 8081 ou host dedicado)
+O arquivo [`web.config`](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/web.config) na raiz do projeto já contém a regra pronta para redirecionar todas as requisições para a porta interna do Node.js:
 
 ```xml
-<!-- ================================================= -->
-<!-- PROXY PARA O PM2 MANAGER                          -->
-<!-- http://docebrinquedo.local/pm2-manager            -->
-<!--       -> http://localhost:6767                    -->
-<!-- ================================================= -->
+<rule name="PM2GUI-ReverseProxy" stopProcessing="true">
+  <match url="(.*)" />
+  <action type="Rewrite" url="http://localhost:6767/{R:1}" />
+</rule>
+```
+
+### B. Sob Subcaminho (ex.: `http://docebrinquedo.local/pm2-manager/`)
+No `web.config` do **site pai** no IIS, adicione a regra:
+
+```xml
 <rule name="pm2-manager" stopProcessing="true">
   <match url="^pm2-manager(?:/(.*))?$" />
   <action type="Rewrite" url="http://localhost:6767/{R:1}" />
 </rule>
 ```
 
-A aplicação trata automaticamente:
-- Redirecionamento da URL sem barra final (`/pm2-manager` → `/pm2-manager/`).
-- Carregamento de recursos estáticos (`css/style.css`, `js/app.js`) com caminhos relativos.
-- Resolução dinâmica das chamadas REST e conexões SSE (`/pm2-manager/api/...`).
+> [!WARNING]
+> **Atenção ao Erro HTTP 400.605 (Loop de Proxy)**:
+> O IIS nunca deve fazer rewrite para a mesma porta em que ele próprio escuta. O Node.js deve rodar em uma porta isolada (ex.: `6767`) e o IIS deve direcionar para `http://localhost:6767/{R:1}`.
 
 ---
 
-## ⚙️ Variáveis de ambiente
+## 📡 Endpoints da API
 
-| Variável | Padrão | Descrição |
-|---------|--------|-----------|
-| `PORT` | `6767` | Porta interna do servidor Node.js |
-
-Para alterar a porta:
-```powershell
-$env:PORT = "6767"
-node server.js
-```
-
-Ou no ecosystem PM2:
-```javascript
-// ecosystem.config.js
-module.exports = {
-  apps: [{
-    name: 'pm2-gui-web',
-    script: 'server.js',
-    env: { PORT: 6767, NODE_ENV: 'production' }
-  }]
-}
-```
-
----
-
-## 📋 Endpoints da API
-
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET    | `/api/processes` | Lista todos os processos |
-| GET    | `/api/processes/:id/logs` | Logs do processo |
-| POST   | `/api/processes/:id/start` | Inicia processo |
-| POST   | `/api/processes/:id/stop` | Para processo |
-| POST   | `/api/processes/:id/restart` | Reinicia processo |
-| POST   | `/api/processes/:id/reload` | Reload gracioso |
-| DELETE | `/api/processes/:id` | Remove processo |
-| POST   | `/api/flush` | Limpa todos os logs |
-| POST   | `/api/save` | Salva estado (pm2 save) |
-| GET    | `/api/system` | Info do sistema |
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `POST` | `/api/auth/login` | Autenticação local ou validação de ticket SSO |
+| `GET`  | `/api/auth/me` | Retorna o perfil do usuário logado |
+| `GET`  | `/api/processes` | Lista todos os processos PM2 e status em tempo real |
+| `GET`  | `/api/processes/:id/logs` | Obtém histórico de logs de um processo |
+| `POST` | `/api/processes/:id/start` | Inicia o processo |
+| `POST` | `/api/processes/:id/stop` | Interrompe o processo |
+| `POST` | `/api/processes/:id/restart` | Reinicia o processo |
+| `POST` | `/api/processes/:id/reload` | Recarrega com zero-downtime |
+| `DELETE`| `/api/processes/:id` | Remove o processo do PM2 |
+| `POST` | `/api/flush` | Limpa todos os logs de stdout e stderr |
+| `POST` | `/api/save` | Salva a lista de processos (`pm2 save`) |
+| `GET`  | `/api/system` | Métricas gerais de CPU, Memória e SO |
+| `GET`  | `/api/metrics/history` | Consulta métricas históricas de CPU/RAM gravadas no SQLite |
+| `GET`  | `/api/servers` | Lista servidores e instâncias remotas cadastradas |
+| `POST` | `/api/servers` | Cadastra novo servidor/agente PM2 |
+| `GET`  | `/api/folders` | Lista diretórios e pastas vinculadas |
+| `GET`  | `/api/users` | Gestão de usuários e permissões |
+| `GET`  | `/api/groups` | Grupos e agrupamentos de serviços |
 
 ---
 
-## 🔐 Integração SSO (Single Sign-On)
+## 🛡️ Padrões e Boas Práticas
 
-O PM2 Web GUI possui integração nativa com o **Portal SSO Doce Brinquedo**.
-
-### Variáveis de Ambiente (`.env`)
-
-Crie ou edite o arquivo `.env` na raiz do projeto (use [.env.example](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/.env.example) como base):
-
-```ini
-PORT=6767
-SSO_URL=http://192.168.13.244:7000
-SSO_API_KEY=dc_live_sua_chave_aqui
-SSO_PORTAL_URL=http://192.168.13.244:7000
-SESSION_SECRET=sua_chave_secreta_aqui
-```
-
-### Como Funciona o Fluxo SSO:
-1. O usuário acessa o sistema pelo Portal SSO ou via link com `?ticket=...`.
-2. O Frontend Angular captura o ticket temporário e limpa a URL imediatamente (`history.replaceState`).
-3. O Backend valida o ticket junto ao SSO através do endpoint `POST /api/apikey/validate-token` com a chave `X-Api-Key`.
-4. Uma sessão local assinada é criada e os dados do usuário (nome, email, avatar, departamento e permissões) são exibidos no cabeçalho do painel.
+- **Codificação UTF-8 Obrigatória**: Todas as respostas HTTP do backend utilizam `charset=utf-8` para garantir integridade de acentos e caracteres especiais.
+- **Data/Hora Local**: Proibição estrita de conversores UTC destrutivos no histórico e logs; o sistema opera exclusivamente com a data/hora local do servidor.
+- **Segurança e `.gitignore`**: Arquivos de ambiente (`.env`), bancos SQLite temporários, relatórios de deploy e pastas `node_modules` são estritamente mantidos fora do controle de versão.
 
 ---
 
-## 🔒 Segurança
+## 📄 Licença
 
-- **X-Api-Key protegida no Backend**: As credenciais de integração com o SSO nunca são expostas ao navegador.
-- **Tokens de Sessão Assinados**: HMAC-SHA256 para integridade e validação de expiração.
-- **Proteção adicional no IIS**: Opcionalmente, utilize Windows Authentication ou restrições de IP no IIS Manager.
-
----
-
-## 🗂️ Estrutura do projeto
-
-```
-pm2-gui-web/
-├── server.js               ← Backend Node.js/Express + SSO API
-├── package.json
-├── .env.example            ← Template de configuração de ambiente
-├── web.config              ← Configuração IIS (ARR reverse proxy)
-├── README.md
-├── docs/
-│   └── GUIA_INTEGRACAO_SSO.md ← Especificação técnica do SSO
-├── frontend/               ← SPA Angular 22 (Material + Signals)
-│   └── src/app/
-│       ├── services/auth.service.ts       ← Estado e handoff do SSO
-│       ├── interceptors/auth.interceptor.ts ← Anexo de token Bearer
-│       └── pages/dashboard/               ← Dashboard com perfil de usuário
-└── public/                 ← Build de produção compilado (servido pelo Node.js)
-```
-
----
-
-## ⌨️ Atalhos de teclado
-
-| Tecla | Ação |
-|-------|------|
-| `Ctrl+R` | Atualizar processos agora |
-| `Esc` | Fechar drawer de logs / modal |
+Este projeto é desenvolvido para uso interno corporativo — **Doce Brinquedo**. Distribuído sob a licença [MIT](file:///d:/garotodeprograma/DC%20---%20PM2-GUI-WEB/package.json).
