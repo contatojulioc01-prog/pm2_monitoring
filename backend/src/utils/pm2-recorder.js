@@ -14,9 +14,20 @@ function getLocalDateTime(date = new Date()) {
 
 let recorderInterval = null;
 
-function listProcessesPM2() {
+function listProcessesPM2(timeoutMs = 4000) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`pm2.list timeout (${timeoutMs}ms)`));
+      }
+    }, timeoutMs);
+
     pm2.list((err, procs) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (err) return reject(err);
       resolve(procs || []);
     });

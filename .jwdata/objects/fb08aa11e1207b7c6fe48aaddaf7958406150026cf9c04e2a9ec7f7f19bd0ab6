@@ -1,0 +1,327 @@
+<div class="servers-page">
+  <div class="page-header">
+    <div class="header-titles">
+      <div class="title-with-badge">
+        <div class="page-icon-badge">
+          <mat-icon>dns</mat-icon>
+        </div>
+        <div>
+          <h1 class="page-title">Servidores Monitorados</h1>
+          <p class="page-subtitle">Gerencie os agentes Windows coletores de permissões e Active Directory</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="showHelp.set(true)">
+        <mat-icon>help_outline</mat-icon>
+        <span>Como Configurar</span>
+      </button>
+      <button class="btn btn-primary" (click)="openModal()">
+        <mat-icon>add</mat-icon>
+        <span>Adicionar Servidor</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Grupos de Conteúdo (Angular Form Groups) -->
+  <div class="form-container">
+    <div class="form-card">
+      <div class="card-header">
+        <mat-icon class="section-icon color-blue">dns</mat-icon>
+        <h3>Servidores e Agentes Registrados</h3>
+      </div>
+
+      <!-- Cards Grid -->
+      <div class="servers-grid">
+    @if (loading()) {
+      @for (i of [1,2,3]; track i) {
+        <div class="skeleton-card"></div>
+      }
+    } @else if (servers().length === 0) {
+      <div class="empty-state">
+        <div class="empty-icon">
+          <mat-icon>dns</mat-icon>
+        </div>
+        <h3>Nenhum servidor cadastrado</h3>
+        <p>Cadastre um servidor Windows com o Agente em execução para coletar os dados.</p>
+        <button class="btn btn-primary" (click)="openModal()">
+          <mat-icon>add</mat-icon>
+          <span>Cadastrar Primeiro Servidor</span>
+        </button>
+      </div>
+    } @else {
+      @for (server of servers(); track server.id) {
+        <div class="server-card" [class.syncing]="server.syncStatus === 'syncing'">
+          <div class="card-header-line">
+            <div class="server-icon-wrap" [class.error]="server.syncStatus === 'failed'" [class.success]="server.syncStatus === 'success'">
+              <mat-icon>dns</mat-icon>
+            </div>
+            
+            <div class="status-badge-wrap">
+              @if (server.syncStatus === 'syncing') {
+                <span class="status-badge syncing">
+                  <span class="spinner-small"></span>
+                  Sincronizando...
+                </span>
+              } @else if (server.syncStatus === 'success') {
+                <span class="status-badge success">
+                  <mat-icon>check_circle</mat-icon>
+                  Sincronizado
+                </span>
+              } @else if (server.syncStatus === 'failed') {
+                <span class="status-badge error" [matTooltip]="server.syncError || 'Erro desconhecido'">
+                  <mat-icon>error</mat-icon>
+                  Falha
+                </span>
+              } @else {
+                <span class="status-badge idle">
+                  <mat-icon>schedule</mat-icon>
+                  Aguardando
+                </span>
+              }
+            </div>
+          </div>
+
+          <div class="server-info-body">
+            <h3 class="server-title">{{ server.name }}</h3>
+
+            <div class="info-row">
+              <mat-icon class="row-icon">lan</mat-icon>
+              <span class="row-text mono">{{ server.ip }}:{{ server.agentPort || 3001 }}</span>
+            </div>
+
+            @if (server.rootPath) {
+              <div class="info-row">
+                <mat-icon class="row-icon color-indigo">folder_open</mat-icon>
+                <span class="row-text mono">{{ server.rootPath }}</span>
+              </div>
+            }
+
+            <div class="info-row muted">
+              <mat-icon class="row-icon">update</mat-icon>
+              <span class="row-text">{{ formatDate(server.lastSyncedAt) }}</span>
+            </div>
+
+            @if (server.syncError && server.syncStatus === 'failed') {
+              <div class="error-box">
+                <mat-icon>warning</mat-icon>
+                <span>{{ server.syncError }}</span>
+              </div>
+            }
+          </div>
+
+          <div class="card-actions-footer">
+            <button class="action-btn sync-btn" 
+                    [disabled]="server.syncStatus === 'syncing' || syncingServerIds.has(server.id)"
+                    (click)="sincronizarServidor(server)"
+                    matTooltip="Sincronizar dados agora">
+              <mat-icon [class.spin]="server.syncStatus === 'syncing' || syncingServerIds.has(server.id)">sync</mat-icon>
+              <span>{{ (server.syncStatus === 'syncing' || syncingServerIds.has(server.id)) ? 'Sincronizando' : 'Sincronizar' }}</span>
+            </button>
+
+            <div class="right-actions">
+              <button class="icon-btn edit-btn" (click)="openModal(server)" matTooltip="Editar servidor">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button class="icon-btn delete-btn" (click)="confirmarExclusao(server)" matTooltip="Excluir servidor">
+                <mat-icon>delete_outline</mat-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Adicionar / Editar Servidor (Cumprindo Angular Modal Layout) -->
+@if (showModal()) {
+  <div class="modal-backdrop">
+    <div class="modal-wrapper max-w-xl">
+      
+      <!-- Header Fixo -->
+      <div class="modal-header">
+        <div class="header-main">
+          <div class="header-icon-badge" [class.edit-mode]="!!editingServer()">
+            <span class="material-icons">{{ editingServer() ? 'edit' : 'dns' }}</span>
+          </div>
+          <div class="header-title-box">
+            <h2>{{ editingServer() ? 'Editar Servidor' : 'Adicionar Novo Servidor' }}</h2>
+            <p>{{ editingServer() ? 'Atualize as credenciais e configurações do agente.' : 'Conecte um novo servidor Windows com o agente instalado.' }}</p>
+          </div>
+        </div>
+        <button type="button" class="close-btn" (click)="closeModal()" title="Fechar">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+
+      <!-- Corpo Rolável com Grupos de Formulário -->
+      <div class="modal-body">
+        <form [formGroup]="serverForm" class="form-container">
+          
+          <!-- GRUPO 1: Identificação e Rede -->
+          <div class="form-card">
+            <div class="card-header">
+              <mat-icon class="section-icon color-blue">dns</mat-icon>
+              <h3>Dados do Servidor & Conexão</h3>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field col-span-2">
+                <label>Nome Amigável do Servidor <span class="required">*</span></label>
+                <input type="text" formControlName="name" placeholder="Ex: Servidor de Arquivos P&G" required />
+              </div>
+
+              <div class="form-field">
+                <label>IP / Hostname <span class="required">*</span></label>
+                <input type="text" formControlName="ip" placeholder="Ex: 192.168.1.12" required />
+              </div>
+
+              <div class="form-field">
+                <label>Porta do Agente <span class="required">*</span></label>
+                <input type="number" formControlName="agentPort" placeholder="3001" required />
+              </div>
+
+              <div class="form-field col-span-2">
+                <label>Token de Sincronização (Segurança) <span class="required">*</span></label>
+                <input type="password" formControlName="token" placeholder="dc_manager_secret_token" required />
+              </div>
+            </div>
+          </div>
+
+          <!-- GRUPO 2: Escopo de Pastas -->
+          <div class="form-card">
+            <div class="card-header">
+              <mat-icon class="section-icon color-emerald">folder_open</mat-icon>
+              <h3>Escopo da Varredura</h3>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field col-span-2">
+                <label>Pasta Raiz para Leitura de ACLs</label>
+                <input type="text" formControlName="rootPath" placeholder="Ex: D:\ ou D:\Dados" />
+                <span class="helper-text">Deixe <code>D:\</code> para varrer o disco D ou especifique um diretório inicial.</span>
+              </div>
+            </div>
+          </div>
+
+        </form>
+      </div>
+
+      <!-- Rodapé Fixo com Botão Loading -->
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="loadingSalvar">
+          Cancelar
+        </button>
+        <button type="button" class="btn btn-primary" (click)="salvarServidor()" [disabled]="loadingSalvar || serverForm.invalid">
+          <mat-progress-spinner *ngIf="loadingSalvar" mode="indeterminate" diameter="18" class="button-spinner"></mat-progress-spinner>
+          <mat-icon *ngIf="!loadingSalvar">save</mat-icon>
+          <span>{{ loadingSalvar ? 'Testando Conexão e Salvando...' : (editingServer() ? 'Salvar Alterações' : 'Conectar e Salvar') }}</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+}
+
+<!-- MODAL: Ajuda / Como Configurar -->
+@if (showHelp()) {
+  <div class="modal-backdrop">
+    <div class="modal-wrapper max-w-2xl">
+      <div class="modal-header">
+        <div class="header-main">
+          <div class="header-icon-badge">
+            <span class="material-icons">help_outline</span>
+          </div>
+          <div class="header-title-box">
+            <h2>Guia de Instalação do Agente</h2>
+            <p>Como rodar o coletor nos servidores Windows monitorados</p>
+          </div>
+        </div>
+        <button type="button" class="close-btn" (click)="showHelp.set(false)">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="help-content">
+          <div class="step-card">
+            <div class="step-badge">1</div>
+            <div class="step-text">
+              <h4>Copie a pasta <code>agent</code> para o servidor</h4>
+              <p>Copie a pasta <code>backend/agent</code> do projeto para o servidor de arquivos (ex: <code>C:\dc-agent</code>).</p>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-badge">2</div>
+            <div class="step-text">
+              <h4>Instale as dependências e inicie</h4>
+              <pre><code>cd C:\dc-agent
+npm install
+npm start</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-badge">3</div>
+            <div class="step-text">
+              <h4>Libere a porta 3001 no Firewall do Windows</h4>
+              <pre><code>New-NetFirewallRule -DisplayName "DC Manager Agent" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3001</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" (click)="showHelp.set(false)">Entendido</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- MODAL: Confirmação de Exclusão -->
+@if (showDeleteModal()) {
+  <div class="modal-backdrop">
+    <div class="modal-wrapper max-w-md">
+      <div class="modal-header">
+        <div class="header-main">
+          <div class="header-icon-badge danger">
+            <span class="material-icons">delete_forever</span>
+          </div>
+          <div class="header-title-box">
+            <h2>Confirmar Remoção</h2>
+            <p>Atenção com a exclusão do servidor</p>
+          </div>
+        </div>
+        <button type="button" class="close-btn" (click)="closeDeleteModal()">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p class="delete-warning-text">
+          Tem certeza de que deseja remover o servidor <strong>{{ serverToDelete()?.name }}</strong>?
+        </p>
+        <p class="delete-warning-sub">
+          Todas as permissões, pastas e dados sincronizados vinculados a este servidor serão excluídos do painel.
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeDeleteModal()" [disabled]="loadingExcluir">
+          Cancelar
+        </button>
+        <button type="button" class="btn btn-danger" (click)="executarExclusao()" [disabled]="loadingExcluir">
+          <mat-progress-spinner *ngIf="loadingExcluir" mode="indeterminate" diameter="18" class="button-spinner"></mat-progress-spinner>
+          <mat-icon *ngIf="!loadingExcluir">delete</mat-icon>
+          <span>{{ loadingExcluir ? 'Excluindo...' : 'Sim, Excluir' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+}
+

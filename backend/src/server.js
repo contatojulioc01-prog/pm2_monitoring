@@ -108,6 +108,28 @@ app.use(express.static(publicPath, { index: false }));
 app.use('/pm2-manager', express.static(publicPath, { index: false }));
 app.use('/doce-manager', express.static(publicPath, { index: false }));
 
+function getBaseHref(req) {
+  const originalUrl = req.headers['x-original-url'] || 
+                      req.headers['x-rewrite-url'] || 
+                      req.headers['x-forwarded-prefix'] || 
+                      req.originalUrl || 
+                      req.url || 
+                      '';
+  const referer = req.headers['referer'] || '';
+
+  if (originalUrl.includes('/pm2-manager') || referer.includes('/pm2-manager')) {
+    return '/pm2-manager/';
+  }
+  if (originalUrl.includes('/doce-manager') || referer.includes('/doce-manager')) {
+    return '/doce-manager/';
+  }
+  if (process.env.PUBLIC_PATH) {
+    const clean = process.env.PUBLIC_PATH.replace(/\/+$/, '');
+    if (clean) return `${clean}/`;
+  }
+  return '/';
+}
+
 function sendIndexHtml(req, res) {
   // Reavalia publicPath caso o build tenha acabado de ser gerado
   if (!fs.existsSync(path.join(publicPath, 'index.html'))) {
@@ -120,17 +142,14 @@ function sendIndexHtml(req, res) {
     return res.status(500).send('Arquivo index.html não encontrado no build. Execute: npm run build');
   }
 
-  const originalUrl = req.originalUrl || req.url || '';
-  let baseHref = '/';
-  if (originalUrl.startsWith('/pm2-manager')) {
-    baseHref = '/pm2-manager/';
-  } else if (originalUrl.startsWith('/doce-manager')) {
-    baseHref = '/doce-manager/';
-  }
+  const baseHref = getBaseHref(req);
 
   fs.readFile(indexPath, 'utf8', (err, html) => {
     if (err) return res.status(500).send('Erro ao ler index.html');
-    const modifiedHtml = html.replace(/<base href="[^"]*">/, `<base href="${baseHref}">`);
+    let modifiedHtml = html;
+    if (modifiedHtml.includes('<base')) {
+      modifiedHtml = modifiedHtml.replace(/<base\s+href="[^"]*"\s*\/?>/i, `<base href="${baseHref}">`);
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(modifiedHtml);
   });

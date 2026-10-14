@@ -77,9 +77,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   logDrawerProcessId = signal<number | string | null>(null);
   logDrawerProcessName = signal('');
   avatarError = signal(false);
-
-  private sse: EventSource | null = null;
-
   statusFilter = signal<'all' | 'online' | 'stopped' | 'errored'>('all');
 
   // Computed
@@ -101,16 +98,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
   countErrored = computed(() => this.processes().filter(p => p.status === 'errored').length);
   countTotal   = computed(() => this.processes().length);
 
+  private liveTelemetryTimer: any = null;
+  private isFetchingTelemetry = false;
+  private consecutiveErrors = 0;
+
   private onVisibilityChange = () => {
     if (document.hidden) {
-      // Quando o usuário não está olhando a tela, desconecta o SSE imediatamente para cessar o monitoramento
-      this.disconnectSSE();
+      // Quando o usuário sai da aba, pausa o timer para poupar recursos do PC e do servidor
+      this.stopLiveTelemetry();
     } else {
-      // Ao retornar para a aba, reconecta e atualiza os dados
+      // Ao retornar para a aba ativa, reativa imediatamente e garante renderização segundo a segundo
       if (this.auth.isAuthenticated()) {
-        this.refreshNow();
+        this.fetchTelemetry();
         this.loadActiveMonitors();
-        this.connectSSE();
+        this.startLiveTelemetry();
       }
     }
   };
@@ -119,10 +120,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     const isAuth = await this.auth.init();
     if (isAuth) {
-      this.refreshNow();
+      // Abre imediatamente com o monitoramento ativo e carrega a telemetria
+      this.connected.set(true);
+      this.fetchTelemetry();
       this.loadSystemInfo();
       this.loadActiveMonitors();
-      this.connectSSE();
+      this.startLiveTelemetry();
     } else {
       this.loading.set(false);
     }
@@ -130,47 +133,51 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
-    this.disconnectSSE();
+    this.stopLiveTelemetry();
   }
 
-  private disconnectSSE(): void {
-    if (this.sse) {
-      this.sse.close();
-      this.sse = null;
-      this.connected.set(false);
+  private startLiveTelemetry(): void {
+    if (this.liveTelemetryTimer) return;
+    // Renderiza segundo a segundo (exatamente a cada 1000ms) sem atrasos
+    this.liveTelemetryTimer = setInterval(() => {
+      if (document.hidden || !this.auth.isAuthenticated()) return;
+      this.fetchTelemetry();
+    }, 1000);
+  }
+
+  private stopLiveTelemetry(): void {
+    if (this.liveTelemetryTimer) {
+      clearInterval(this.liveTelemetryTimer);
+      this.liveTelemetryTimer = null;
     }
   }
 
-  private connectSSE(): void {
-    if (!this.auth.isAuthenticated() || document.hidden) return;
+  fetchTelemetry(): void {
+    if (this.isFetchingTelemetry) return;
+    this.isFetchingTelemetry = true;
 
-    this.disconnectSSE();
-    this.sse = this.pm2.streamProcesses();
-
-    this.sse.addEventListener('message', (ev) => {
-      try {
-        const res = JSON.parse(ev.data);
-        if (res.success) {
+    this.pm2.getProcesses().subscribe({
+      next: res => {
+        this.isFetchingTelemetry = false;
+        this.consecutiveErrors = 0;
+        if (res.success && res.data) {
           this.processes.set(res.data);
           if (res.metrics) {
             this.systemMetrics.set(res.metrics);
           }
           this.lastUpdated.set(new Date());
           this.connected.set(true);
-          this.loading.set(false);
         }
-      } catch {}
-    });
-
-    this.sse.addEventListener('error', () => {
-      this.connected.set(false);
-      if (this.auth.isAuthenticated() && !document.hidden) {
-        setTimeout(() => {
-          this.disconnectSSE();
-          if (this.auth.isAuthenticated() && !document.hidden) {
-            this.connectSSE();
-          }
-        }, 1500);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.isFetchingTelemetry = false;
+        this.consecutiveErrors++;
+        // Se houver 3 falhas consecutivas (3 segundos sem resposta), indica desconexão
+        if (this.consecutiveErrors >= 3) {
+          this.connected.set(false);
+        }
+        this.loading.set(false);
       }
     });
   }
@@ -203,7 +210,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   handleLogout(): void {
-    this.disconnectSSE();
+    this.stopLiveTelemetry();
     this.processes.set([]);
     this.systemInfo.set(null);
     this.connected.set(false);
@@ -227,22 +234,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   refreshNow(): void {
-    this.pm2.getProcesses().subscribe({
-      next: res => {
-        if (res.success) {
-          this.processes.set(res.data!);
-          if (res.metrics) {
-            this.systemMetrics.set(res.metrics);
-          }
-          this.lastUpdated.set(new Date());
-          this.connected.set(true);
-        }
-        this.loading.set(false);
-      },
-      error: () => {
-        this.loading.set(false);
-      }
-    });
+    this.fetchTelemetry();
   }
 
   // ── Actions ──

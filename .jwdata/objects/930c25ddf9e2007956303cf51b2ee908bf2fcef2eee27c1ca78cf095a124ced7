@@ -1,0 +1,797 @@
+const express = require('express');
+const router = express.Router();
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+const pm2 = require('pm2');
+
+// ─── Hardware Metrics Tracker ──────────────────────────────────────────────────
+let lastCpuTimes = null;
+
+function getCpuUsage() {
+  const cpus = os.cpus();
+  if (!cpus || cpus.length === 0) return { usagePercent: 0, freePercent: 100, cores: 1, model: 'Unknown' };
+
+  let totalUser = 0, totalNice = 0, totalSys = 0, totalIdle = 0, totalIrq = 0;
+  for (const cpu of cpus) {
+    totalUser += cpu.times.user;
+    totalNice += cpu.times.nice;
+    totalSys += cpu.times.sys;
+    totalIdle += cpu.times.idle;
+    totalIrq += cpu.times.irq;
+  }
+  const total = totalUser + totalNice + totalSys + totalIdle + totalIrq;
+  const idle = totalIdle;
+
+  let usagePercent = 0;
+  if (lastCpuTimes) {
+    const diffTotal = total - lastCpuTimes.total;
+    const diffIdle = idle - lastCpuTimes.idle;
+    if (diffTotal > 0) {
+      usagePercent = Math.max(0, Math.min(100, parseFloat((((diffTotal - diffIdle) / diffTotal) * 100).toFixed(1))));
+    }
+  }
+  lastCpuTimes = { total, idle };
+
+  return {
+    usagePercent,
+    freePercent: parseFloat((100 - usagePercent).toFixed(1)),
+    cores: cpus.length,
+    model: (cpus[0]?.model || 'CPU').trim()
+  };
+}
+
+getCpuUsage();
+
+function getMemoryUsage() {
+  const total = os.totalmem();
+  const free = os.freemem();
+  const used = Math.max(0, total - free);
+  const usagePercent = total > 0 ? parseFloat(((used / total) * 100).toFixed(1)) : 0;
+  return { total, free, used, usagePercent };
+}
+
+let lastDiskMetrics = null;
+let lastDiskCheckTime = 0;
+
+function getDiskUsage() {
+  const now = Date.now();
+  if (lastDiskMetrics && (now - lastDiskCheckTime) < 15000) {
+    return lastDiskMetrics;
+  }
+  try {
+    const rootPath = process.platform === 'win32' ? (process.cwd().split(path.sep)[0] || 'C:') + '\\' : '/';
+    if (fs.statfsSync) {
+      const stats = fs.statfsSync(rootPath);
+      const total = stats.bsize * stats.blocks;
+      const free = stats.bsize * stats.bavail;
+      const used = Math.max(0, total - free);
+      const usagePercent = total > 0 ? parseFloat(((used / total) * 100).toFixed(1)) : 0;
+      lastDiskMetrics = { total, free, used, usagePercent, drive: rootPath };
+      lastDiskCheckTime = now;
+      return lastDiskMetrics;
+    }
+  } catch (e) {}
+  return lastDiskMetrics || { total: 0, free: 0, used: 0, usagePercent: 0, drive: 'N/A' };
+}
+
+function getSystemMetrics() {
+  return {
+    cpu: getCpuUsage(),
+    memory: getMemoryUsage(),
+    disk: getDiskUsage()
+  };
+}
+
+function getLocalDateTimeString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const h = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const s = pad(date.getSeconds());
+  return `${y}-${m}-${d}T${h}:${min}:${s}`;
+}
+
+// ─── PM2 Persistent Connection com Auto-Reconexão ─────────────────────────────
+let pm2Connected = false;
+let pm2ConnectingPromise = null;
+
+function ensurePM2Connection() {
+  if (pm2Connected) return Promise.resolve(pm2);
+  if (pm2ConnectingPromise) return pm2ConnectingPromise;
+
+  pm2ConnectingPromise = new Promise((resolve, reject) => {
+    pm2.connect((err) => {
+      pm2ConnectingPromise = null;
+      if (err) {
+        pm2Connected = false;
+        console.error('Falha ao conectar ao daemon PM2:', err.message);
+        return reject(err);
+      }
+      pm2Connected = true;
+      console.log('✅ Conectado ao daemon PM2 com sucesso.');
+      resolve(pm2);
+    });
+  });
+
+  return pm2ConnectingPromise;
+}
+
+// Conexão inicial na inicialização
+ensurePM2Connection().catch(() => {});
+
+function withPM2(fn) {
+  return ensurePM2Connection().then((pm2Instance) => {
+    return Promise.resolve(fn(pm2Instance));
+  });
+}
+
+function formatProcess(p) {
+  const env = p.pm2_env || {};
+  const monit = p.monit || {};
+  return {
+    id: p.pm_id,
+    pid: p.pid,
+    name: env.name || p.name || 'unknown',
+    status: env.status || 'unknown',
+    cpu: monit.cpu || 0,
+    memory: monit.memory || 0,
+    restarts: env.restart_time || 0,
+    uptime: env.pm_uptime || 0,
+    createdAt: env.created_at || 0,
+    execPath: env.pm_exec_path || env.exec_path || '',
+    nodeVersion: env.node_version || '',
+    execMode: env.exec_mode || 'fork',
+    instances: env.instances || 1,
+    watch: !!env.watch,
+    logOut: env.pm_out_log_path || '',
+    logErr: env.pm_err_log_path || '',
+    namespace: env.namespace || 'default',
+  };
+}
+
+function pm2Action(action, idOrName) {
+  return withPM2((pm2Instance) => new Promise((resolve, reject) => {
+    pm2Instance[action](String(idOrName), (err) => {
+      if (err) return reject(new Error(`${action} falhou: ` + (err.message || err)));
+      resolve({ success: true, action, target: idOrName });
+    });
+  }));
+}
+
+function listPM2(timeoutMs = 4000) {
+  return withPM2((pm2Instance) => new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`pm2.list timeout (${timeoutMs}ms)`));
+      }
+    }, timeoutMs);
+
+    pm2Instance.list((err, procs) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) return reject(err);
+      resolve(procs || []);
+    });
+  }));
+}
+
+function findProc(list, idOrName) {
+  return list.find(
+    (p) => String(p.pm_id) === String(idOrName) ||
+      (p.pm2_env && p.pm2_env.name === idOrName)
+  );
+}
+
+const pm2Recorder = require('../utils/pm2-recorder');
+
+// ─── Cache Central de Telemetria e Deduplicação de Requisições ─────────────────
+let cachedTelemetry = null;
+let lastTelemetryTime = 0;
+let telemetryPromise = null;
+
+async function getProcessesAndMetrics(forceFresh = false) {
+  const now = Date.now();
+  if (!forceFresh && cachedTelemetry && (now - lastTelemetryTime) < 800) {
+    return cachedTelemetry;
+  }
+  if (telemetryPromise) {
+    return telemetryPromise;
+  }
+
+  telemetryPromise = (async () => {
+    try {
+      const list = await listPM2(4000);
+      const metrics = getSystemMetrics();
+      const payload = {
+        success: true,
+        data: list.map(formatProcess),
+        metrics
+      };
+      cachedTelemetry = payload;
+      lastTelemetryTime = Date.now();
+      return payload;
+    } finally {
+      telemetryPromise = null;
+    }
+  })();
+
+  return telemetryPromise;
+}
+
+// ─── SSE Global Broadcast com Proteção Concorrente e Heartbeat IIS/Proxy ────────
+const sseClients = new Set();
+let sseLoopTimeout = null;
+let sseHeartbeatInterval = null;
+let isBroadcasting = false;
+
+function broadcastSSE(dataStr) {
+  const message = `data: ${dataStr}\n\n`;
+  for (const client of sseClients) {
+    try {
+      if (!client.writable || client.destroyed || client.writableEnded) {
+        sseClients.delete(client);
+        continue;
+      }
+      client.write(message);
+      if (typeof client.flush === 'function') {
+        client.flush();
+      }
+    } catch (_) {
+      sseClients.delete(client);
+    }
+  }
+  if (sseClients.size === 0) {
+    stopSseLoop();
+  }
+}
+
+function broadcastHeartbeat() {
+  for (const client of sseClients) {
+    try {
+      if (!client.writable || client.destroyed || client.writableEnded) {
+        sseClients.delete(client);
+        continue;
+      }
+      client.write(': ping\n\n');
+      if (typeof client.flush === 'function') {
+        client.flush();
+      }
+    } catch (_) {
+      sseClients.delete(client);
+    }
+  }
+  if (sseClients.size === 0) {
+    stopSseLoop();
+  }
+}
+
+async function runBroadcastCycle() {
+  if (sseClients.size === 0) {
+    stopSseLoop();
+    return;
+  }
+
+  if (isBroadcasting) {
+    scheduleNextBroadcast(500);
+    return;
+  }
+
+  isBroadcasting = true;
+  try {
+    const payload = await getProcessesAndMetrics(true);
+    broadcastSSE(JSON.stringify(payload));
+  } catch (err) {
+    console.warn('[SSE Monitor] Erro no ciclo de telemetria:', err.message);
+  } finally {
+    isBroadcasting = false;
+    if (sseClients.size > 0) {
+      scheduleNextBroadcast(1000);
+    }
+  }
+}
+
+function scheduleNextBroadcast(delayMs = 1000) {
+  if (sseLoopTimeout) clearTimeout(sseLoopTimeout);
+  sseLoopTimeout = setTimeout(runBroadcastCycle, delayMs);
+}
+
+function triggerImmediateBroadcast() {
+  if (sseClients.size === 0) return;
+  scheduleNextBroadcast(30);
+}
+
+function startSseLoop() {
+  if (!sseHeartbeatInterval) {
+    sseHeartbeatInterval = setInterval(broadcastHeartbeat, 10000);
+  }
+  if (!sseLoopTimeout && !isBroadcasting) {
+    console.log(`[SSE Monitor] Telemetria em tempo real ativada (${sseClients.size} cliente(s) conectado(s)).`);
+    scheduleNextBroadcast(0);
+  }
+}
+
+function stopSseLoop() {
+  if (sseClients.size === 0) {
+    if (sseLoopTimeout) {
+      clearTimeout(sseLoopTimeout);
+      sseLoopTimeout = null;
+    }
+    if (sseHeartbeatInterval) {
+      clearInterval(sseHeartbeatInterval);
+      sseHeartbeatInterval = null;
+    }
+    isBroadcasting = false;
+    lastCpuTimes = null;
+    console.log('[SSE Monitor] Telemetria em tempo real pausada (nenhum visualizador ativo).');
+  }
+}
+
+// ─── Rotas ────────────────────────────────────────────────────────────────────
+
+// GET /api/processes
+router.get('/processes', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  try {
+    const payload = await getProcessesAndMetrics(false);
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/processes/stream
+router.get('/processes/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Content-Encoding': 'none'
+  });
+
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  if (req.socket) {
+    req.socket.setKeepAlive(true, 10000);
+    req.socket.setNoDelay(true);
+    req.socket.setTimeout(0);
+  }
+
+  try {
+    res.write('retry: 2500\n\n');
+    res.write(': connected\n\n');
+    if (typeof res.flush === 'function') res.flush();
+  } catch (_) {}
+
+  sseClients.add(res);
+
+  // Envia primeira amostra imediatamente para este novo cliente
+  getProcessesAndMetrics(false)
+    .then(payload => {
+      if (res.writable && !res.destroyed && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        if (typeof res.flush === 'function') res.flush();
+      }
+    })
+    .catch(() => {});
+
+  startSseLoop();
+
+  const cleanup = () => {
+    sseClients.delete(res);
+    if (sseClients.size === 0) {
+      stopSseLoop();
+    }
+  };
+
+  req.on('close', cleanup);
+  req.on('end', cleanup);
+  req.on('error', cleanup);
+  res.on('close', cleanup);
+  res.on('finish', cleanup);
+  res.on('error', cleanup);
+});
+
+// GET /api/system
+router.get('/system', async (req, res) => {
+  try {
+    let pm2Version = 'unknown';
+    try { pm2Version = execSync('pm2 --version', { timeout: 5000 }).toString().trim(); } catch (_) {}
+    res.json({
+      success: true,
+      data: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        pm2Version,
+        hostname: os.hostname(),
+        uptime: process.uptime(),
+        serverTime: getLocalDateTimeString(),
+        totalMemory: os.totalmem(),
+        freeMemory: os.freemem(),
+        cpus: os.cpus().length,
+        metrics: getSystemMetrics()
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/launch
+router.post('/launch', async (req, res) => {
+  const { script, name, instances, execMode, watch, args } = req.body;
+  if (!script || !script.trim()) {
+    return res.status(400).json({ success: false, error: 'O campo "script" é obrigatório.' });
+  }
+
+  const opts = { script: script.trim() };
+  if (name && name.trim()) opts.name = name.trim();
+  if (execMode) opts.exec_mode = execMode;
+  if (execMode === 'cluster') opts.instances = instances === 'max' ? 0 : (parseInt(instances) || 1);
+  if (watch) opts.watch = true;
+  if (args && args.trim()) opts.args = args.trim().split(/\s+/);
+
+  try {
+    await withPM2((pm2) => new Promise((resolve, reject) => {
+      pm2.start(opts, (err) => err ? reject(new Error(String(err.message || err))) : resolve());
+    }));
+    res.json({ success: true, message: `Processo "${opts.name || opts.script}" iniciado com sucesso.` });
+    setTimeout(() => triggerImmediateBroadcast(), 100);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Process action endpoints
+router.post('/processes/:id/start', async (req, res) => {
+  try {
+    const result = await pm2Action('start', req.params.id);
+    res.json(result);
+    setTimeout(() => triggerImmediateBroadcast(), 80);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/processes/:id/stop', async (req, res) => {
+  try {
+    const result = await pm2Action('stop', req.params.id);
+    res.json(result);
+    setTimeout(() => triggerImmediateBroadcast(), 80);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/processes/:id/restart', async (req, res) => {
+  try {
+    const result = await pm2Action('restart', req.params.id);
+    res.json(result);
+    setTimeout(() => triggerImmediateBroadcast(), 100);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/processes/:id/reload', async (req, res) => {
+  try {
+    const result = await pm2Action('reload', req.params.id);
+    res.json(result);
+    setTimeout(() => triggerImmediateBroadcast(), 100);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/processes/:id', async (req, res) => {
+  try {
+    const result = await pm2Action('delete', req.params.id);
+    res.json(result);
+    setTimeout(() => triggerImmediateBroadcast(), 80);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/processes/:id/describe
+router.get('/processes/:id/describe', async (req, res) => {
+  try {
+    const list = await listPM2();
+    const proc = findProc(list, req.params.id);
+    if (!proc) return res.status(404).json({ success: false, error: 'Processo não encontrado.' });
+
+    const env = proc.pm2_env || {};
+    const monit = proc.monit || {};
+
+    const safeEnv = {};
+    for (const [k, v] of Object.entries(env.env || {})) {
+      if (!/secret|password|token|key|pwd/i.test(k)) safeEnv[k] = String(v).substring(0, 300);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: proc.pm_id,
+        pid: proc.pid,
+        name: env.name || 'unknown',
+        status: env.status || 'unknown',
+        cpu: monit.cpu || 0,
+        memory: monit.memory || 0,
+        restarts: env.restart_time || 0,
+        uptime: env.pm_uptime || 0,
+        createdAt: env.created_at || 0,
+        version: env.version || '',
+        nodeVersion: env.node_version || '',
+        execPath: env.pm_exec_path || env.exec_path || '',
+        execMode: env.exec_mode || 'fork',
+        instances: env.instances || 1,
+        watch: !!env.watch,
+        interpreter: env.exec_interpreter || 'node',
+        nodeArgs: Array.isArray(env.node_args) ? env.node_args.join(' ') : '',
+        args: Array.isArray(env.args) ? env.args.join(' ') : '',
+        logOut: env.pm_out_log_path || '',
+        logErr: env.pm_err_log_path || '',
+        namespace: env.namespace || 'default',
+        env: safeEnv,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/processes/:id/logs
+router.get('/processes/:id/logs', async (req, res) => {
+  try {
+    const lines = parseInt(req.query.lines) || 100;
+    const list = await listPM2();
+    const proc = findProc(list, req.params.id);
+    if (!proc) return res.status(404).json({ success: false, error: 'Processo não encontrado.' });
+
+    const env = proc.pm2_env || {};
+
+    function readTail(filePath, n) {
+      if (!filePath || !fs.existsSync(filePath)) return [];
+      try {
+        return fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean).slice(-n);
+      } catch (_) { return []; }
+    }
+
+    const stdout = readTail(env.pm_out_log_path, lines).map(t => ({ type: 'out', text: t }));
+    const stderr = readTail(env.pm_err_log_path, lines).map(t => ({ type: 'err', text: t }));
+
+    res.json({
+      success: true,
+      data: {
+        processName: env.name,
+        logOut: env.pm_out_log_path,
+        logErr: env.pm_err_log_path,
+        lines: [...stdout, ...stderr],
+        stdoutCount: stdout.length,
+        stderrCount: stderr.length,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/processes/:id/logs/stream
+router.get('/processes/:id/logs/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch (_) {}
+  }, 10000);
+
+  const watchers = [];
+  const sendEvent = (type, text) => {
+    try { res.write(`data: ${JSON.stringify({ type, text })}\n\n`); } catch (_) {}
+  };
+
+  try {
+    const list = await listPM2();
+    const proc = findProc(list, req.params.id);
+
+    if (!proc) {
+      sendEvent('error', 'Processo não encontrado.');
+      clearInterval(heartbeat);
+      res.end();
+      return;
+    }
+
+    const env = proc.pm2_env || {};
+    const files = [
+      { path: env.pm_out_log_path, type: 'out' },
+      { path: env.pm_err_log_path, type: 'err' },
+    ].filter(f => f.path && fs.existsSync(f.path));
+
+    if (files.length === 0) {
+      sendEvent('info', 'Nenhum arquivo de log encontrado para este processo.');
+    }
+
+    for (const { path: filePath, type } of files) {
+      let pos = 0;
+      try { pos = fs.statSync(filePath).size; } catch (_) {}
+
+      const w = setInterval(() => {
+        try {
+          const { size } = fs.statSync(filePath);
+          if (size > pos) {
+            const len = size - pos;
+            const buf = Buffer.alloc(len);
+            const fd = fs.openSync(filePath, 'r');
+            fs.readSync(fd, buf, 0, len, pos);
+            fs.closeSync(fd);
+            pos = size;
+            buf.toString('utf8').split('\n')
+              .filter(l => l.trim())
+              .forEach(l => sendEvent(type, l));
+          } else if (size < pos) {
+            pos = 0;
+            sendEvent('info', '─── log rotacionado ───');
+          }
+        } catch (_) {}
+      }, 500);
+
+      watchers.push(w);
+    }
+  } catch (err) {
+    sendEvent('error', err.message);
+  }
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    watchers.forEach(w => clearInterval(w));
+  });
+});
+
+// POST /api/flush
+router.post('/flush', (req, res) => {
+  try {
+    execSync('pm2 flush', { timeout: 10000 });
+    res.json({ success: true, message: 'Logs limpos com sucesso.' });
+    setTimeout(() => triggerImmediateBroadcast(), 50);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/save
+router.post('/save', (req, res) => {
+  try {
+    execSync('pm2 save', { timeout: 10000 });
+    res.json({ success: true, message: 'Estado salvo com sucesso.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/startup
+router.post('/startup', (req, res) => {
+  let output = '';
+  let isWindows = process.platform === 'win32';
+
+  if (isWindows) {
+    try {
+      output = execSync('pm2 startup windows 2>&1', { timeout: 10000, shell: true }).toString();
+    } catch (e) {
+      output = [e.stdout, e.stderr].filter(Boolean).map(b => b.toString()).join('\n');
+    }
+
+    if (!output || output.includes('getuid is not a function') || output.includes('TypeError')) {
+      output = [
+        '⚠  No Windows, o comando "pm2 startup" não é suportado nativamente.',
+        '',
+        '✅  OPÇÃO RECOMENDADA — pm2-installer (executa como SYSTEM):',
+        '   npm install -g pm2-installer',
+        '   pm2-installer  (execute como Administrador)',
+        '',
+        '✅  ALTERNATIVA — Agendar via Task Scheduler:',
+        '   1. Abra o Task Scheduler (taskschd.msc)',
+        '   2. Crie uma tarefa que execute ao iniciar o sistema',
+        '   3. Ação: "pm2 resurrect" usando o caminho completo do pm2.cmd',
+        '      Ex: C:\\Users\\' + os.userInfo().username + '\\AppData\\Roaming\\npm\\pm2.cmd',
+        '',
+        'Após reiniciar, execute "pm2 resurrect" para restaurar os processos salvos.',
+        'Lembre de executar "pm2 save" antes de reiniciar o servidor.',
+      ].join('\n');
+    }
+  } else {
+    try {
+      output = execSync('pm2 startup', { timeout: 15000 }).toString();
+    } catch (e) {
+      output = [e.stdout, e.stderr].filter(Boolean).map(b => b.toString()).join('\n');
+    }
+  }
+
+  res.json({
+    success: true,
+    output: output.trim() || 'Nenhuma saída gerada.',
+    isWindows,
+  });
+});
+
+// ─── Process Monitor (Minuto a Minuto com Tempo Selecionado) ───────────────────
+
+// POST /api/process-monitor/start
+router.post('/process-monitor/start', async (req, res) => {
+  try {
+    const { processId, processName, durationMinutes, customHours } = req.body;
+    let duration = parseInt(durationMinutes, 10);
+    if (customHours && !isNaN(customHours) && parseFloat(customHours) > 0) {
+      duration = Math.round(parseFloat(customHours) * 60);
+    }
+    if (!duration || duration <= 0) {
+      return res.status(400).json({ success: false, error: 'Duração em minutos inválida.' });
+    }
+    const session = await pm2Recorder.startSession(processId, processName, duration);
+    res.json({ success: true, data: session });
+    setTimeout(() => triggerImmediateBroadcast(), 50);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/process-monitor/:sessionId/stop
+router.post('/process-monitor/:sessionId/stop', async (req, res) => {
+  try {
+    await pm2Recorder.stopSession(req.params.sessionId);
+    res.json({ success: true, message: 'Monitoramento encerrado com sucesso.' });
+    setTimeout(() => triggerImmediateBroadcast(), 50);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/process-monitor/active
+router.get('/process-monitor/active', async (req, res) => {
+  try {
+    const active = await pm2Recorder.getActiveSessions();
+    res.json({ success: true, data: active });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/process-monitor/session/:sessionId
+router.get('/process-monitor/session/:sessionId', async (req, res) => {
+  try {
+    const details = await pm2Recorder.getSessionDetails(req.params.sessionId);
+    if (!details) {
+      return res.status(404).json({ success: false, error: 'Sessão de monitoramento não encontrada.' });
+    }
+    res.json({ success: true, data: details });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/process-monitor/process/:processName
+router.get('/process-monitor/process/:processName', async (req, res) => {
+  try {
+    const sessions = await pm2Recorder.getSessionsForProcess(req.params.processName);
+    res.json({ success: true, data: sessions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+module.exports = router;
+

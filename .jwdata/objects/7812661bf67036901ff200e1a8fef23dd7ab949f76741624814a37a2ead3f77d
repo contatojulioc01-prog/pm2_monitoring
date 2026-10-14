@@ -1,0 +1,28 @@
+{
+  "name": "pm2-gui-web",
+  "version": "2.0.0",
+  "description": "DC - PM2 Manager & Gerenciador de Permissões (Doce Brinquedo)",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue.bold,magenta.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && node --watch src/server.js",
+    "dev:frontend": "cd frontend && npm start",
+    "build": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "pm2": "^7.0.3",
+    "sqlite3": "^5.1.7",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

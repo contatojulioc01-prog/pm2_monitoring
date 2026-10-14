@@ -6,12 +6,13 @@ const path = require('path');
 const { execSync } = require('child_process');
 const pm2 = require('pm2');
 
-// ─── Hardware Metrics Tracker ──────────────────────────────────────────────────
+// ─── Hardware Metrics Tracker (Amostragem em Background Desacoplada e Otimizada) ─
+let cachedCpuUsage = { usagePercent: 0, freePercent: 100, cores: os.cpus().length || 1, model: (os.cpus()[0]?.model || 'CPU').trim() };
 let lastCpuTimes = null;
 
-function getCpuUsage() {
+function sampleCpuUsage() {
   const cpus = os.cpus();
-  if (!cpus || cpus.length === 0) return { usagePercent: 0, freePercent: 100, cores: 1, model: 'Unknown' };
+  if (!cpus || cpus.length === 0) return;
 
   let totalUser = 0, totalNice = 0, totalSys = 0, totalIdle = 0, totalIrq = 0;
   for (const cpu of cpus) {
@@ -24,35 +25,57 @@ function getCpuUsage() {
   const total = totalUser + totalNice + totalSys + totalIdle + totalIrq;
   const idle = totalIdle;
 
-  let usagePercent = 0;
   if (lastCpuTimes) {
     const diffTotal = total - lastCpuTimes.total;
     const diffIdle = idle - lastCpuTimes.idle;
-    if (diffTotal > 0) {
-      usagePercent = Math.max(0, Math.min(100, parseFloat((((diffTotal - diffIdle) / diffTotal) * 100).toFixed(1))));
+    // Exige amostragem de pelo menos 100ms para evitar artefatos de quantização no Windows (evita falso 100% de CPU)
+    if (diffTotal > 100) {
+      const rawPercent = ((diffTotal - diffIdle) / diffTotal) * 100;
+      const usagePercent = Math.max(0, Math.min(100, parseFloat(rawPercent.toFixed(1))));
+      cachedCpuUsage = {
+        usagePercent,
+        freePercent: parseFloat((100 - usagePercent).toFixed(1)),
+        cores: cpus.length,
+        model: (cpus[0]?.model || 'CPU').trim()
+      };
     }
   }
   lastCpuTimes = { total, idle };
-
-  return {
-    usagePercent,
-    freePercent: parseFloat((100 - usagePercent).toFixed(1)),
-    cores: cpus.length,
-    model: (cpus[0]?.model || 'CPU').trim()
-  };
 }
 
-getCpuUsage();
+// Amostragem constante a cada 1000ms: leitura sempre precisa, estável e com ZERO custo por requisição
+sampleCpuUsage();
+setInterval(sampleCpuUsage, 1000);
+
+function getCpuUsage() {
+  return cachedCpuUsage;
+}
+
+let cachedMemoryUsage = null;
+let lastMemoryCheckTime = 0;
 
 function getMemoryUsage() {
+  const now = Date.now();
+  if (cachedMemoryUsage && (now - lastMemoryCheckTime) < 1000) {
+    return cachedMemoryUsage;
+  }
   const total = os.totalmem();
   const free = os.freemem();
   const used = Math.max(0, total - free);
   const usagePercent = total > 0 ? parseFloat(((used / total) * 100).toFixed(1)) : 0;
-  return { total, free, used, usagePercent };
+  cachedMemoryUsage = { total, free, used, usagePercent };
+  lastMemoryCheckTime = now;
+  return cachedMemoryUsage;
 }
 
+let lastDiskMetrics = null;
+let lastDiskCheckTime = 0;
+
 function getDiskUsage() {
+  const now = Date.now();
+  if (lastDiskMetrics && (now - lastDiskCheckTime) < 15000) {
+    return lastDiskMetrics;
+  }
   try {
     const rootPath = process.platform === 'win32' ? (process.cwd().split(path.sep)[0] || 'C:') + '\\' : '/';
     if (fs.statfsSync) {
@@ -61,10 +84,12 @@ function getDiskUsage() {
       const free = stats.bsize * stats.bavail;
       const used = Math.max(0, total - free);
       const usagePercent = total > 0 ? parseFloat(((used / total) * 100).toFixed(1)) : 0;
-      return { total, free, used, usagePercent, drive: rootPath };
+      lastDiskMetrics = { total, free, used, usagePercent, drive: rootPath };
+      lastDiskCheckTime = now;
+      return lastDiskMetrics;
     }
   } catch (e) {}
-  return { total: 0, free: 0, used: 0, usagePercent: 0, drive: 'N/A' };
+  return lastDiskMetrics || { total: 0, free: 0, used: 0, usagePercent: 0, drive: 'N/A' };
 }
 
 function getSystemMetrics() {
@@ -75,26 +100,48 @@ function getSystemMetrics() {
   };
 }
 
-// ─── PM2 Persistent Connection ──────────────────────────────────────────────────
-let pm2Connected = false;
+function getLocalDateTimeString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const h = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const s = pad(date.getSeconds());
+  return `${y}-${m}-${d}T${h}:${min}:${s}`;
+}
 
-pm2.connect((err) => {
-  if (err) {
-    console.error('Falha ao conectar ao daemon PM2:', err);
-    return;
-  }
-  pm2Connected = true;
-  console.log('✅ Conectado ao daemon PM2');
-});
+// ─── PM2 Persistent Connection com Auto-Reconexão ─────────────────────────────
+let pm2Connected = false;
+let pm2ConnectingPromise = null;
+
+function ensurePM2Connection() {
+  if (pm2Connected) return Promise.resolve(pm2);
+  if (pm2ConnectingPromise) return pm2ConnectingPromise;
+
+  pm2ConnectingPromise = new Promise((resolve, reject) => {
+    pm2.connect((err) => {
+      pm2ConnectingPromise = null;
+      if (err) {
+        pm2Connected = false;
+        console.error('Falha ao conectar ao daemon PM2:', err.message);
+        return reject(err);
+      }
+      pm2Connected = true;
+      console.log('✅ Conectado ao daemon PM2 com sucesso.');
+      resolve(pm2);
+    });
+  });
+
+  return pm2ConnectingPromise;
+}
+
+// Conexão inicial na inicialização
+ensurePM2Connection().catch(() => {});
 
 function withPM2(fn) {
-  return new Promise((resolve, reject) => {
-    if (!pm2Connected) return reject(new Error('PM2 não está conectado. Tente novamente.'));
-    try {
-      Promise.resolve(fn(pm2)).then(resolve).catch(reject);
-    } catch (err) {
-      reject(err);
-    }
+  return ensurePM2Connection().then((pm2Instance) => {
+    return Promise.resolve(fn(pm2Instance));
   });
 }
 
@@ -123,17 +170,31 @@ function formatProcess(p) {
 }
 
 function pm2Action(action, idOrName) {
-  return withPM2((pm2) => new Promise((resolve, reject) => {
-    pm2[action](String(idOrName), (err) => {
+  return withPM2((pm2Instance) => new Promise((resolve, reject) => {
+    pm2Instance[action](String(idOrName), (err) => {
       if (err) return reject(new Error(`${action} falhou: ` + (err.message || err)));
       resolve({ success: true, action, target: idOrName });
     });
   }));
 }
 
-function listPM2() {
-  return withPM2((pm2) => new Promise((resolve, reject) => {
-    pm2.list((err, procs) => err ? reject(err) : resolve(procs));
+function listPM2(timeoutMs = 4000) {
+  return withPM2((pm2Instance) => new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`pm2.list timeout (${timeoutMs}ms)`));
+      }
+    }, timeoutMs);
+
+    pm2Instance.list((err, procs) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) return reject(err);
+      resolve(procs || []);
+    });
   }));
 }
 
@@ -146,59 +207,145 @@ function findProc(list, idOrName) {
 
 const pm2Recorder = require('../utils/pm2-recorder');
 
-// ─── SSE Global Broadcast (Ativo SOMENTE quando houver visualizador conectado) ──
-let sseClients = [];
-let sseInterval = null;
+// ─── Cache Central de Telemetria e Deduplicação de Requisições ─────────────────
+let cachedTelemetry = null;
+let lastTelemetryTime = 0;
+let telemetryPromise = null;
+
+async function getProcessesAndMetrics(forceFresh = false) {
+  const now = Date.now();
+  if (!forceFresh && cachedTelemetry && (now - lastTelemetryTime) < 800) {
+    return cachedTelemetry;
+  }
+  if (telemetryPromise) {
+    return telemetryPromise;
+  }
+
+  telemetryPromise = (async () => {
+    try {
+      const list = await listPM2(4000);
+      const metrics = getSystemMetrics();
+      const payload = {
+        success: true,
+        data: list.map(formatProcess),
+        metrics
+      };
+      cachedTelemetry = payload;
+      lastTelemetryTime = Date.now();
+      return payload;
+    } finally {
+      telemetryPromise = null;
+    }
+  })();
+
+  return telemetryPromise;
+}
+
+// ─── SSE Global Broadcast com Proteção Concorrente e Heartbeat IIS/Proxy ────────
+const sseClients = new Set();
+let sseLoopTimeout = null;
+let sseHeartbeatInterval = null;
+let isBroadcasting = false;
 
 function broadcastSSE(dataStr) {
-  sseClients = sseClients.filter(res => {
+  const message = `data: ${dataStr}\n\n`;
+  for (const client of sseClients) {
     try {
-      res.write(`data: ${dataStr}\n\n`);
-      if (typeof res.flush === 'function') {
-        res.flush();
+      if (!client.writable || client.destroyed || client.writableEnded) {
+        sseClients.delete(client);
+        continue;
       }
-      return true;
-    } catch (e) {
-      return false;
+      client.write(message);
+      if (typeof client.flush === 'function') {
+        client.flush();
+      }
+    } catch (_) {
+      sseClients.delete(client);
     }
-  });
-  if (sseClients.length === 0) {
-    stopSseInterval();
+  }
+  if (sseClients.size === 0) {
+    stopSseLoop();
   }
 }
 
-async function triggerImmediateBroadcast() {
-  if (sseClients.length === 0) return;
+function broadcastHeartbeat() {
+  for (const client of sseClients) {
+    try {
+      if (!client.writable || client.destroyed || client.writableEnded) {
+        sseClients.delete(client);
+        continue;
+      }
+      client.write(': ping\n\n');
+      if (typeof client.flush === 'function') {
+        client.flush();
+      }
+    } catch (_) {
+      sseClients.delete(client);
+    }
+  }
+  if (sseClients.size === 0) {
+    stopSseLoop();
+  }
+}
+
+async function runBroadcastCycle() {
+  if (sseClients.size === 0) {
+    stopSseLoop();
+    return;
+  }
+
+  if (isBroadcasting) {
+    scheduleNextBroadcast(500);
+    return;
+  }
+
+  isBroadcasting = true;
   try {
-    const list = await listPM2();
-    const metrics = getSystemMetrics();
-    broadcastSSE(JSON.stringify({ success: true, data: list.map(formatProcess), metrics }));
+    const payload = await getProcessesAndMetrics(true);
+    broadcastSSE(JSON.stringify(payload));
   } catch (err) {
-    broadcastSSE(JSON.stringify({ success: false, error: err.message }));
+    console.warn('[SSE Monitor] Erro no ciclo de telemetria:', err.message);
+  } finally {
+    isBroadcasting = false;
+    if (sseClients.size > 0) {
+      scheduleNextBroadcast(1000);
+    }
   }
 }
 
-function startSseInterval() {
-  if (sseInterval) return;
-  console.log('[SSE Monitor] Monitoramento em tempo real ATIVADO (visualizador conectado).');
-  // Dispara primeira amostra imediatamente sem esperar o tick do setInterval
-  triggerImmediateBroadcast();
-  // Intervalo em tempo real de 1000ms (1 segundo) para telemetria sem atraso
-  sseInterval = setInterval(async () => {
-    if (sseClients.length === 0) {
-      stopSseInterval();
-      return;
-    }
-    await triggerImmediateBroadcast();
-  }, 1000);
+function scheduleNextBroadcast(delayMs = 1000) {
+  if (sseLoopTimeout) clearTimeout(sseLoopTimeout);
+  sseLoopTimeout = setTimeout(runBroadcastCycle, delayMs);
 }
 
-function stopSseInterval() {
-  if (sseClients.length === 0 && sseInterval) {
-    clearInterval(sseInterval);
-    sseInterval = null;
+function triggerImmediateBroadcast() {
+  if (sseClients.size === 0) return;
+  scheduleNextBroadcast(30);
+}
+
+function startSseLoop() {
+  if (!sseHeartbeatInterval) {
+    sseHeartbeatInterval = setInterval(broadcastHeartbeat, 10000);
+  }
+  if (!sseLoopTimeout && !isBroadcasting) {
+    console.log(`[SSE Monitor] Telemetria em tempo real ativada (${sseClients.size} cliente(s) conectado(s)).`);
+    scheduleNextBroadcast(0);
+  }
+}
+
+function stopSseLoop() {
+  if (sseClients.size === 0) {
+    if (sseLoopTimeout) {
+      clearTimeout(sseLoopTimeout);
+      sseLoopTimeout = null;
+    }
+    if (sseHeartbeatInterval) {
+      clearInterval(sseHeartbeatInterval);
+      sseHeartbeatInterval = null;
+    }
+    isBroadcasting = false;
     lastCpuTimes = null;
-    console.log('[SSE Monitor] Monitoramento em tempo real PAUSADO (nenhum visualizador ativo).');
+    console.log('[SSE Monitor] Telemetria em tempo real pausada (nenhum visualizador ativo).');
   }
 }
 
@@ -210,8 +357,8 @@ router.get('/processes', async (req, res) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   try {
-    const list = await listPM2();
-    res.json({ success: true, data: list.map(formatProcess), metrics: getSystemMetrics() });
+    const payload = await getProcessesAndMetrics(false);
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -219,41 +366,58 @@ router.get('/processes', async (req, res) => {
 
 // GET /api/processes/stream
 router.get('/processes/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.setHeader('Content-Encoding', 'none');
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Content-Encoding': 'none'
+  });
+
   if (typeof res.flushHeaders === 'function') {
     res.flushHeaders();
   }
 
-  sseClients.push(res);
-  startSseInterval();
+  if (req.socket) {
+    req.socket.setKeepAlive(true, 10000);
+    req.socket.setNoDelay(true);
+    req.socket.setTimeout(0);
+  }
 
-  listPM2()
-    .then(list => {
-      try {
-        res.write(`data: ${JSON.stringify({ success: true, data: list.map(formatProcess), metrics: getSystemMetrics() })}\n\n`);
+  try {
+    res.write('retry: 2500\n\n');
+    res.write(': connected\n\n');
+    if (typeof res.flush === 'function') res.flush();
+  } catch (_) {}
+
+  sseClients.add(res);
+
+  // Envia primeira amostra imediatamente para este novo cliente
+  getProcessesAndMetrics(false)
+    .then(payload => {
+      if (res.writable && !res.destroyed && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
         if (typeof res.flush === 'function') res.flush();
-      } catch (_) {}
+      }
     })
-    .catch(err => {
-      try {
-        res.write(`data: ${JSON.stringify({ success: false, error: err.message })}\n\n`);
-        if (typeof res.flush === 'function') res.flush();
-      } catch (_) {}
-    });
+    .catch(() => {});
+
+  startSseLoop();
 
   const cleanup = () => {
-    sseClients = sseClients.filter(c => c !== res);
-    stopSseInterval();
+    sseClients.delete(res);
+    if (sseClients.size === 0) {
+      stopSseLoop();
+    }
   };
 
   req.on('close', cleanup);
   req.on('end', cleanup);
+  req.on('error', cleanup);
   res.on('close', cleanup);
   res.on('finish', cleanup);
+  res.on('error', cleanup);
 });
 
 // GET /api/system
@@ -269,7 +433,7 @@ router.get('/system', async (req, res) => {
         pm2Version,
         hostname: os.hostname(),
         uptime: process.uptime(),
-        serverTime: new Date().toISOString(),
+        serverTime: getLocalDateTimeString(),
         totalMemory: os.totalmem(),
         freeMemory: os.freemem(),
         cpus: os.cpus().length,

@@ -1,0 +1,209 @@
+<div class="process-card" [class]="statusClass">
+
+  <!-- Card top: status badge -->
+  <div class="card-top">
+    <div class="card-icon" [class]="'card-icon--' + process.status">
+      @switch (process.status) {
+        @case ('online') {
+          <mat-icon>check_circle</mat-icon>
+        }
+        @case ('stopped') {
+          <mat-icon>stop_circle</mat-icon>
+        }
+        @case ('errored') {
+          <mat-icon>error</mat-icon>
+        }
+        @default {
+          <mat-icon>help</mat-icon>
+        }
+      }
+    </div>
+
+    <div class="card-top-badges">
+      @if (isMonitored) {
+        <span class="recording-badge" (click)="onMonitor.emit(process)" matTooltip="Monitoramento ativo gravando minuto a minuto">
+          <span class="rec-dot-pulse"></span>
+          <span>REC</span>
+        </span>
+      }
+      <span class="status-badge" [class]="'badge--' + process.status">
+        <span class="status-dot"></span>
+        {{ statusLabel }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Card body -->
+  <div class="card-body">
+    <h3 class="proc-name" [matTooltip]="process.name">{{ process.name }}</h3>
+
+    <div class="proc-meta">
+      <div class="meta-row">
+        <mat-icon class="meta-icon">tag</mat-icon>
+        <span>ID: {{ process.id }}</span>
+        <span class="meta-sep">·</span>
+        <span>PID: {{ process.pid }}</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">folder_open</mat-icon>
+        <span [matTooltip]="process.execPath" class="meta-path">{{ shortPath(process.execPath) }}</span>
+      </div>
+      <div class="meta-row meta-metrics">
+        <mat-icon class="meta-icon">memory</mat-icon>
+        <span>{{ process.cpu }}% CPU</span>
+        <div class="mini-bar-track">
+          <div class="mini-bar-fill cpu" [style.width.%]="process.cpu > 100 ? 100 : process.cpu" [class.alert]="process.cpu >= 70"></div>
+        </div>
+        <span class="meta-sep">·</span>
+        <span>{{ formatMemory(process.memory) }} RAM</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">schedule</mat-icon>
+        <span>Uptime: {{ formatUptime(process.uptime) }}</span>
+        <span class="meta-sep">·</span>
+        <span>↺ {{ process.restarts }}</span>
+      </div>
+      <div class="meta-row">
+        <mat-icon class="meta-icon">settings</mat-icon>
+        <span>{{ process.execMode }}</span>
+        @if (process.execMode === 'cluster') {
+          <span class="meta-sep">·</span>
+          <span>{{ process.instances }}x</span>
+        }
+        @if (process.watch) {
+          <span class="watch-badge">watch</span>
+        }
+      </div>
+    </div>
+
+    <!-- Error box -->
+    @if (process.status === 'errored') {
+      <div class="error-box">
+        <mat-icon>warning</mat-icon>
+        <span>Processo com erro — verifique os logs</span>
+      </div>
+    }
+  </div>
+
+  <!-- Card footer: actions -->
+  <div class="card-footer">
+    <!-- Primary action: Start / Stop -->
+    <div class="footer-primary-action">
+      @if (process.status === 'online') {
+        <button
+          type="button"
+          class="btn-action-primary btn-action-primary--stop"
+          (click)="onStop.emit(process)"
+          matTooltip="Parar processo"
+        >
+          <mat-icon>stop</mat-icon>
+          <span class="btn-label">Parar</span>
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="btn-action-primary btn-action-primary--start"
+          (click)="onStart.emit(process)"
+          matTooltip="Iniciar processo"
+        >
+          <mat-icon>play_arrow</mat-icon>
+          <span class="btn-label">Iniciar</span>
+        </button>
+      }
+    </div>
+
+    <!-- Secondary tools icon dock -->
+    <div class="footer-icon-group">
+      <button
+        type="button"
+        class="btn-icon-btn btn-icon--restart"
+        (click)="onRestart.emit(process)"
+        matTooltip="Reiniciar processo"
+        aria-label="Reiniciar"
+      >
+        <mat-icon>refresh</mat-icon>
+      </button>
+
+      <button
+        type="button"
+        class="btn-icon-btn btn-icon--logs"
+        (click)="onLogs.emit(process)"
+        matTooltip="Ver logs em tempo real"
+        aria-label="Logs"
+      >
+        <mat-icon>description</mat-icon>
+      </button>
+
+      <button
+        type="button"
+        class="btn-icon-btn btn-icon--monitor"
+        [class.active]="isMonitored"
+        (click)="onMonitor.emit(process)"
+        [matTooltip]="isMonitored ? 'Gravação ativa (minuto a minuto)' : 'Monitorar CPU/RAM (minuto a minuto)'"
+        aria-label="Monitorar"
+      >
+        <mat-icon>{{ isMonitored ? 'fiber_manual_record' : 'query_stats' }}</mat-icon>
+      </button>
+
+      <button
+        type="button"
+        mat-icon-button
+        [matMenuTriggerFor]="moreMenu"
+        class="btn-icon-btn btn-icon--more"
+        matTooltip="Mais ações"
+        aria-label="Mais opções"
+      >
+        <mat-icon>more_vert</mat-icon>
+      </button>
+    </div>
+
+    <!-- Menu suspenso com a lista completa de ações -->
+    <mat-menu #moreMenu="matMenu" class="process-card-menu">
+      <div class="menu-header-caption">Ações do Processo</div>
+
+      @if (process.status === 'online') {
+        <button mat-menu-item (click)="onStop.emit(process)">
+          <mat-icon class="icon-rose">stop</mat-icon>
+          <span>Parar processo</span>
+        </button>
+      } @else {
+        <button mat-menu-item (click)="onStart.emit(process)">
+          <mat-icon class="icon-emerald">play_arrow</mat-icon>
+          <span>Iniciar processo</span>
+        </button>
+      }
+
+      <button mat-menu-item (click)="onRestart.emit(process)">
+        <mat-icon class="icon-indigo">refresh</mat-icon>
+        <span>Reiniciar (restart)</span>
+      </button>
+
+      <button mat-menu-item (click)="onReload.emit(process)">
+        <mat-icon class="icon-cyan">autorenew</mat-icon>
+        <span>Reload gracioso (0-downtime)</span>
+      </button>
+
+      <button mat-menu-item (click)="onLogs.emit(process)">
+        <mat-icon class="icon-sky">description</mat-icon>
+        <span>Ver logs em tempo real</span>
+      </button>
+
+      <button mat-menu-item (click)="onMonitor.emit(process)">
+        <mat-icon class="icon-purple">query_stats</mat-icon>
+        <span>{{ isMonitored ? 'Gerenciar gravação de métricas' : 'Monitorar minuto a minuto' }}</span>
+      </button>
+
+      <button mat-menu-item (click)="onDescribe.emit(process)">
+        <mat-icon class="icon-slate">info</mat-icon>
+        <span>Detalhes do processo (describe)</span>
+      </button>
+
+      <mat-divider></mat-divider>
+
+      <button mat-menu-item (click)="onDelete.emit(process)" class="menu-item--danger">
+        <mat-icon>delete_forever</mat-icon>
+        <span>Remover do PM2</span>
+      </button>
+    </mat-menu>
+  </div>
+</div>
