@@ -23,8 +23,9 @@ export class ProcessCardComponent {
   @Output() onReload   = new EventEmitter<Pm2Process>();
   @Output() onDelete   = new EventEmitter<Pm2Process>();
   @Output() onLogs     = new EventEmitter<Pm2Process>();
-  @Output() onDescribe = new EventEmitter<Pm2Process>();
-  @Output() onMonitor  = new EventEmitter<Pm2Process>();
+  @Output() onDescribe  = new EventEmitter<Pm2Process>();
+  @Output() onMonitor   = new EventEmitter<Pm2Process>();
+  @Output() onEditAlias = new EventEmitter<Pm2Process>();
 
   get statusLabel(): string {
     switch (this.process.status) {

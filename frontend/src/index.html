@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8">
   <title>PM2 Manager</title>
+  <base href="/">
   <script>
-    // Detecção dinâmica de base href (funciona por porta direta ex: :6767 ou por subcaminho /pm2-manager/)
+    // Ajuste dinâmico de base href conforme o subcaminho do proxy reverso
     (function() {
       var p = window.location.pathname;
-      if (p.length > 1 && !p.endsWith('/') && !p.split('/').pop().includes('.')) {
-        window.location.replace(p + '/' + window.location.search + window.location.hash);
-        return;
+      var base = document.querySelector('base');
+      if (base) {
+        if (p.indexOf('/pm2-manager') !== -1) {
+          base.setAttribute('href', '/pm2-manager/');
+        } else if (p.indexOf('/doce-manager') !== -1) {
+          base.setAttribute('href', '/doce-manager/');
+        }
       }
-      var isPm2 = p.indexOf('/pm2-manager') !== -1;
-      var isDoce = p.indexOf('/doce-manager') !== -1;
-      var baseHref = isPm2 ? '/pm2-manager/' : (isDoce ? '/doce-manager/' : '/');
-      document.write('<base href="' + baseHref + '">');
     })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">

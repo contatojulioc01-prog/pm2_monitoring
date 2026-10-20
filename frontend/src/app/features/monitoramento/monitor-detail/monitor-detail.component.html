@@ -1,0 +1,297 @@
+<!-- Estado de Carregamento Inicial -->
+<div *ngIf="carregando && !monitor" class="detail-loading-state">
+  <mat-spinner diameter="44"></mat-spinner>
+  <p>Carregando detalhes do serviço...</p>
+</div>
+
+<!-- Estado de Erro -->
+<div *ngIf="erroCarregar && !monitor" class="detail-error-state">
+  <mat-icon class="error-state-icon">error_outline</mat-icon>
+  <h3>Falha ao carregar monitor</h3>
+  <p>{{ erroCarregar }}</p>
+  <button type="button" class="btn btn-action" (click)="carregarTodosDados()">
+    <mat-icon>refresh</mat-icon>
+    <span>Tentar Novamente</span>
+  </button>
+</div>
+
+<!-- Conteúdo Principal do Monitor -->
+<div class="detail-container" *ngIf="monitor">
+  <!-- Cabeçalho do Monitor -->
+  <div class="detail-header">
+    <div class="header-main-info">
+      <div class="title-and-status">
+        <div
+          class="pulse-dot-large"
+          [class.up]="monitor.status === 1"
+          [class.down]="monitor.status === 0"
+          [class.pending]="monitor.status === 2"
+          [class.maintenance]="monitor.status === 3"
+        ></div>
+
+        <div>
+          <div class="monitor-heading-row">
+            <h1>{{ monitor.name }}</h1>
+            <span class="group-badge" *ngIf="monitor.group_name">📁 {{ monitor.group_name }}</span>
+            <span class="type-badge">{{ monitor.type }}</span>
+            <span
+              class="status-pill"
+              [class.up]="monitor.status === 1"
+              [class.down]="monitor.status === 0"
+              [class.pending]="monitor.status === 2"
+              [class.maintenance]="monitor.status === 3"
+            >
+              {{ monitor.status === 1 ? 'OPERACIONAL' : (monitor.status === 0 ? 'FORA DO AR' : (monitor.status === 2 ? 'VERIFICANDO' : 'MANUTENÇÃO')) }}
+            </span>
+          </div>
+
+          <div class="target-row">
+            <span class="target-label">Alvo:</span>
+            <span class="target-url">{{ monitor.url || monitor.hostname || '-' }}</span>
+            <button
+              type="button"
+              class="copy-btn"
+              [class.btn-copied]="targetCopiado"
+              (click)="copiarAlvo()"
+              matTooltip="Copiar endereço do alvo"
+            >
+              <mat-icon>{{ targetCopiado ? 'check' : 'content_copy' }}</mat-icon>
+              <span>{{ targetCopiado ? 'Copiado!' : 'Copiar' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações: Pausar/Retomar, Editar, Excluir -->
+    <div class="header-actions-group">
+      <button
+        *ngIf="monitor.active"
+        type="button"
+        class="btn btn-action"
+        (click)="pausar()"
+        [disabled]="loadingPausar"
+        matTooltip="Pausar ciclo de monitoramento"
+      >
+        <mat-spinner *ngIf="loadingPausar" diameter="16" class="btn-spinner"></mat-spinner>
+        <mat-icon *ngIf="!loadingPausar">pause</mat-icon>
+        <span>{{ loadingPausar ? 'Pausando...' : 'Pausar' }}</span>
+      </button>
+
+      <button
+        *ngIf="!monitor.active"
+        type="button"
+        class="btn btn-primary-action"
+        (click)="retomar()"
+        [disabled]="loadingRetomar"
+        matTooltip="Retomar ciclo de monitoramento"
+      >
+        <mat-spinner *ngIf="loadingRetomar" diameter="16" class="btn-spinner"></mat-spinner>
+        <mat-icon *ngIf="!loadingRetomar">play_arrow</mat-icon>
+        <span>{{ loadingRetomar ? 'Retomando...' : 'Retomar' }}</span>
+      </button>
+
+      <button type="button" class="btn btn-action" (click)="abrirEditar()" matTooltip="Editar configurações do monitor">
+        <mat-icon>edit</mat-icon>
+        <span>Editar</span>
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-danger-action"
+        (click)="excluir()"
+        [disabled]="loadingExcluir"
+        matTooltip="Excluir monitor"
+      >
+        <mat-spinner *ngIf="loadingExcluir" diameter="16" class="btn-spinner"></mat-spinner>
+        <mat-icon *ngIf="!loadingExcluir">delete</mat-icon>
+        <span>{{ loadingExcluir ? 'Excluindo...' : 'Excluir' }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Barra dos Últimos Batimentos com Tooltips -->
+  <div class="heartbeats-card">
+    <div class="card-title-row">
+      <h3>
+        <mat-icon class="icon-blue">timeline</mat-icon>
+        <span>Histórico de Batimentos Recentes (Últimos {{ beats.length }})</span>
+      </h3>
+      <span class="interval-tag">
+        Intervalo: {{ monitor.interval_s }}s
+      </span>
+    </div>
+
+    <div class="beats-bar-wrapper">
+      <div *ngIf="beats.length === 0" class="no-beats-placeholder">
+        Aguardando primeiras coletas do agendador para este monitor...
+      </div>
+      <div
+        *ngFor="let b of beats"
+        class="beat-slot"
+        [class.up]="b.status === 1"
+        [class.down]="b.status === 0"
+        [class.pending]="b.status === 2"
+        [class.maintenance]="b.status === 3"
+        [matTooltip]="(b.time || '') + ' | ' + (b.status === 1 ? 'UP' : (b.status === 0 ? 'DOWN' : 'PENDING')) + ' | ' + (b.ping_ms || 0) + 'ms' + (b.msg ? ' | ' + b.msg : '')"
+      ></div>
+    </div>
+
+    <div class="beats-legend-row">
+      <span>{{ beats.length }} batimentos atrás</span>
+      <span *ngIf="monitor.msg" class="last-msg-text">Último status: <em>{{ monitor.msg }}</em></span>
+      <span>Agora</span>
+    </div>
+  </div>
+
+  <!-- Cards de Uptime e Latência -->
+  <div class="stats-grid">
+    <div class="stat-box">
+      <span class="stat-box-title">Uptime 24 Horas</span>
+      <span class="stat-box-value" [style.color]="(stats?.uptime24h ?? 0) >= 99 ? '#10b981' : '#f59e0b'">
+        {{ stats?.uptime24h != null ? stats?.uptime24h + '%' : '-' }}
+      </span>
+      <span class="stat-box-sub">Janela de 24h</span>
+    </div>
+
+    <div class="stat-box">
+      <span class="stat-box-title">Uptime 7 Dias</span>
+      <span class="stat-box-value" [style.color]="(stats?.uptime7d ?? 0) >= 99 ? '#10b981' : '#f59e0b'">
+        {{ stats?.uptime7d != null ? stats?.uptime7d + '%' : '-' }}
+      </span>
+      <span class="stat-box-sub">Última semana</span>
+    </div>
+
+    <div class="stat-box">
+      <span class="stat-box-title">Uptime 30 Dias</span>
+      <span class="stat-box-value" [style.color]="(stats?.uptime30d ?? 0) >= 99 ? '#10b981' : '#f59e0b'">
+        {{ stats?.uptime30d != null ? stats?.uptime30d + '%' : '-' }}
+      </span>
+      <span class="stat-box-sub">Último mês</span>
+    </div>
+
+    <div class="stat-box">
+      <span class="stat-box-title">Latência Média</span>
+      <span class="stat-box-value">
+        {{ stats?.pingAvg != null ? stats?.pingAvg + 'ms' : '-' }}
+      </span>
+      <span class="stat-box-sub">Mín: {{ stats?.pingMin ?? 0 }}ms | Máx: {{ stats?.pingMax ?? 0 }}ms</span>
+    </div>
+  </div>
+
+  <!-- Gráfico de Latência com Chart.js -->
+  <div class="chart-card">
+    <div class="card-title-row">
+      <h3>
+        <mat-icon class="icon-emerald">show_chart</mat-icon>
+        <span>Tempo de Resposta (Latência)</span>
+      </h3>
+
+      <div class="timeframe-selector">
+        <button
+          type="button"
+          class="tf-btn"
+          [class.active]="selectedTimeframe === '3h'"
+          (click)="mudarTimeframe('3h')"
+        >
+          3h
+        </button>
+        <button
+          type="button"
+          class="tf-btn"
+          [class.active]="selectedTimeframe === '24h'"
+          (click)="mudarTimeframe('24h')"
+        >
+          24h
+        </button>
+        <button
+          type="button"
+          class="tf-btn"
+          [class.active]="selectedTimeframe === '7d'"
+          (click)="mudarTimeframe('7d')"
+        >
+          7d
+        </button>
+        <button
+          type="button"
+          class="tf-btn"
+          [class.active]="selectedTimeframe === '30d'"
+          (click)="mudarTimeframe('30d')"
+        >
+          30d
+        </button>
+      </div>
+    </div>
+
+    <div class="chart-canvas-container">
+      <canvas #latencyCanvas id="latencyChartCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Card do Certificado TLS (se aplicável) -->
+  <div class="cert-card" *ngIf="tlsInfo && tlsInfo.valid_to">
+    <div class="cert-info">
+      <div class="cert-icon">
+        <mat-icon>verified_user</mat-icon>
+      </div>
+      <div>
+        <h4>Certificado TLS / SSL</h4>
+        <div class="cert-details">
+          Emissor: <strong>{{ tlsInfo.issuer || 'N/A' }}</strong> | Válido até: <strong>{{ tlsInfo.valid_to }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="cert-days-badge" [class.warning]="diasRestantesCert <= 14">
+      {{ diasRestantesCert }} dias restantes
+    </div>
+  </div>
+
+  <!-- Tabela de Incidentes e Eventos -->
+  <div class="events-card">
+    <div class="card-title-row">
+      <h3>
+        <mat-icon class="icon-rose">notification_important</mat-icon>
+        <span>Histórico de Incidentes do Serviço</span>
+      </h3>
+    </div>
+
+    <div *ngIf="incidentes.length === 0" class="no-incidents-msg">
+      Nenhum incidente registrado para este monitor.
+    </div>
+
+    <table class="events-table" *ngIf="incidentes.length > 0">
+      <thead>
+        <tr>
+          <th>Início</th>
+          <th>Fim / Resolução</th>
+          <th>Causa Reportada</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let inc of incidentes">
+          <td>{{ inc.started_at }}</td>
+          <td>{{ inc.ended_at || 'Em andamento' }}</td>
+          <td>{{ inc.cause || 'Falha no teste da sonda' }}</td>
+          <td>
+            <span
+              class="status-badge"
+              [class.down]="!inc.ended_at"
+              [class.up]="inc.ended_at"
+            >
+              {{ inc.ended_at ? 'RESOLVIDO' : 'ABERTO' }}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal de Edição -->
+<app-monitor-form
+  *ngIf="modalEditAberto"
+  [monitorId]="monitor?.id || null"
+  (fechou)="fecharModalEdit($event)"
+></app-monitor-form>

@@ -1,0 +1,157 @@
+<div class="alias-modal-container">
+  <!-- Header Fixo -->
+  <div class="modal-header">
+    <div class="header-main">
+      <div class="header-icon-badge" [class.has-alias]="!!data.process.alias">
+        <mat-icon>{{ data.process.alias ? 'label' : 'label_outline' }}</mat-icon>
+      </div>
+      <div class="header-title-box">
+        <h2>{{ data.process.alias ? 'Editar Apelido' : 'Definir Apelido' }}</h2>
+        <p>Personalize o nome de exibição da aplicação no painel</p>
+      </div>
+    </div>
+    <button type="button" class="close-btn" (click)="fechar()" title="Fechar" [disabled]="isSaving || isRemoving">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <!-- Scrollable Body -->
+  <div class="modal-body">
+    <div class="form-container">
+      
+      <!-- Informações do Processo Atual -->
+      <div class="info-card">
+        <div class="info-card-header">
+          <div class="info-icon">
+            <mat-icon>terminal</mat-icon>
+          </div>
+          <div class="info-content">
+            <span class="info-label">Nome Original no PM2</span>
+            <div class="info-name-row">
+              <span class="info-name font-mono">{{ data.process.name }}</span>
+              <span class="info-id">ID: #{{ data.process.id }}</span>
+              <span class="info-status" [class]="'badge--' + data.process.status">
+                <span class="status-dot"></span>
+                {{ data.process.status.toUpperCase() }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulário de Apelido -->
+      <div class="form-card">
+        <div class="card-header">
+          <mat-icon class="section-icon color-blue">badge</mat-icon>
+          <h3>Apelido Amigável</h3>
+        </div>
+
+        <div class="form-field-group">
+          <label for="aliasInput" class="field-label">
+            Apelido / Nome de Apresentação
+            <span class="required">*</span>
+          </label>
+          <div class="input-wrapper">
+            <mat-icon class="input-icon">edit_note</mat-icon>
+            <input
+              id="aliasInput"
+              type="text"
+              class="form-input"
+              [(ngModel)]="alias"
+              (keydown.enter)="salvar()"
+              placeholder="Ex: Portal Web - API Principal"
+              maxlength="60"
+              [disabled]="isSaving || isRemoving"
+              autofocus
+            />
+            @if (alias) {
+              <button type="button" class="clear-input-btn" (click)="alias = ''" title="Limpar campo">
+                <mat-icon>clear</mat-icon>
+              </button>
+            }
+          </div>
+          <div class="field-footer">
+            <span class="field-hint">
+              O apelido substituirá o nome do PM2 como título principal no card e na tabela. O nome original continuará visível como subtexto.
+            </span>
+            <span class="char-count" [class.limit]="alias.length >= 50">{{ alias.length }}/60</span>
+          </div>
+        </div>
+
+        <!-- Preview ao vivo -->
+        <div class="preview-box">
+          <div class="preview-badge-label">
+            <mat-icon>visibility</mat-icon>
+            <span>Pré-visualização no Painel:</span>
+          </div>
+          <div class="preview-card-mock">
+            <div class="mock-title-row">
+              <span class="mock-main-name font-bold">
+                {{ alias.trim() || data.process.name }}
+              </span>
+              @if (alias.trim()) {
+                <span class="mock-alias-tag">Apelido</span>
+              }
+            </div>
+            @if (alias.trim()) {
+              <div class="mock-subtext">
+                <mat-icon>terminal</mat-icon>
+                <span class="font-mono">{{ data.process.name }}</span>
+              </div>
+            }
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Fixed Footer -->
+  <div class="modal-footer">
+    <div class="footer-left">
+      @if (data.process.alias) {
+        <button
+          type="button"
+          class="btn-remove"
+          (click)="remover()"
+          [disabled]="isSaving || isRemoving"
+          title="Remover apelido atual e voltar a exibir somente o nome original"
+        >
+          @if (isRemoving) {
+            <mat-icon class="spin-icon">autorenew</mat-icon>
+            <span>Removendo...</span>
+          } @else {
+            <mat-icon>delete_outline</mat-icon>
+            <span>Remover Apelido</span>
+          }
+        </button>
+      }
+    </div>
+    <div class="footer-right">
+      <button
+        type="button"
+        class="btn-cancel"
+        (click)="fechar()"
+        [disabled]="isSaving || isRemoving"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="btn-save"
+        (click)="salvar()"
+        [disabled]="isSaving || isRemoving || !alias.trim()"
+      >
+        @if (isSaving) {
+          <mat-icon class="spin-icon">autorenew</mat-icon>
+          <span>Salvando...</span>
+        } @else {
+          <mat-icon>check</mat-icon>
+          <span>Salvar Apelido</span>
+        }
+      </button>
+    </div>
+  </div>
+</div>
+

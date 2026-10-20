@@ -6,6 +6,7 @@ export interface Pm2Process {
   id: number;
   pid: number;
   name: string;
+  alias?: string | null;
   status: 'online' | 'stopped' | 'errored' | 'stopping' | 'launching' | 'one-launch-status' | string;
   cpu: number;
   memory: number;
@@ -207,4 +208,20 @@ export class Pm2Service {
   getProcessMonitorHistory(processName: string): Observable<ApiResponse<MonitoringSession[]>> {
     return this.http.get<ApiResponse<MonitoringSession[]>>(`${this.API}/process-monitor/process/${encodeURIComponent(processName)}`);
   }
+
+  getProcessAliases(): Observable<ApiResponse<Record<string, string>>> {
+    return this.http.get<ApiResponse<Record<string, string>>>(`${this.API}/pm2/aliases`);
+  }
+
+  setProcessAlias(processName: string, alias: string): Observable<ApiResponse<{ processName: string; alias: string }>> {
+    return this.http.post<ApiResponse<{ processName: string; alias: string }>>(`${this.API}/pm2/aliases`, {
+      processName,
+      alias
+    });
+  }
+
+  deleteProcessAlias(processName: string): Observable<ApiResponse<void>> {
+    return this.http.delete<ApiResponse<void>>(`${this.API}/pm2/aliases/${encodeURIComponent(processName)}`);
+  }
 }
+

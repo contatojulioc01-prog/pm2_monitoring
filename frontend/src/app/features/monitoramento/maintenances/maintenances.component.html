@@ -1,0 +1,241 @@
+<div class="maintenances-container">
+  <!-- Cabeçalho -->
+  <div class="maintenances-header">
+    <div>
+      <h1>Janelas de Manutenção Programada</h1>
+      <p>Configure períodos de manutenção (pontuais ou semanais) para suprimir alertas durante manutenções planejadas.</p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="abrirModalNovo()">
+      <span class="material-icons">add</span>
+      <span>Nova Manutenção</span>
+    </button>
+  </div>
+
+  <!-- Loading da Lista -->
+  <div *ngIf="carregandoLista" class="empty-state">
+    <span class="button-spinner dark" style="width: 32px; height: 32px; border-width: 3px;"></span>
+    <p style="margin-top: 12px;">Carregando janelas de manutenção...</p>
+  </div>
+
+  <!-- Estado Vazio -->
+  <div *ngIf="!carregandoLista && maintenances.length === 0" class="empty-state">
+    <span class="material-icons empty-icon">event_busy</span>
+    <p class="empty-text">Nenhuma janela de manutenção cadastrada.</p>
+    <button type="button" class="btn btn-primary" (click)="abrirModalNovo()">Criar Primeira Janela</button>
+  </div>
+
+  <!-- Lista de Manutenções -->
+  <div class="maintenances-grid" *ngIf="!carregandoLista && maintenances.length > 0">
+    <div *ngFor="let m of maintenances" class="maintenance-card">
+      <div class="maintenance-top">
+        <div class="maintenance-icon-badge">
+          <span class="material-icons">build</span>
+        </div>
+
+        <div class="maintenance-info">
+          <h3 class="maintenance-name">{{ m.name }}</h3>
+          <span class="strategy-badge">{{ m.strategy === 'once' ? 'Pontual (Uma vez)' : 'Recorrente Semanal' }}</span>
+
+          <div class="schedule-details" *ngIf="m.strategy === 'once'">
+            <span class="material-icons schedule-icon">date_range</span>
+            <span>De: {{ formatDate(m.start_at) }} até {{ formatDate(m.end_at) }}</span>
+          </div>
+
+          <div class="schedule-details" *ngIf="m.strategy === 'weekly'">
+            <span class="material-icons schedule-icon">schedule</span>
+            <span>Dias: {{ getWeekdaysLabel(m.weekdays) }} ({{ m.start_time }} às {{ m.end_time }})</span>
+          </div>
+
+          <div class="monitors-tags" *ngIf="m.monitors && m.monitors.length > 0">
+            <span *ngFor="let s of m.monitors" class="m-tag">{{ s.name }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="maintenance-actions">
+        <button type="button" class="btn btn-cancel" (click)="abrirModalEditar(m)">
+          <span class="material-icons" style="font-size: 16px;">edit</span>
+          <span>Editar</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-danger"
+          (click)="excluir(m.id, m.name)"
+          [disabled]="loadingExcluirId === m.id"
+          title="Excluir"
+        >
+          <span *ngIf="loadingExcluirId === m.id" class="button-spinner"></span>
+          <span *ngIf="loadingExcluirId !== m.id" class="material-icons" style="font-size: 16px;">delete</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Cadastro / Edição de Manutenção -->
+<div class="modal-backdrop" *ngIf="modalAberto">
+  <div class="modal-wrapper" (click)="$event.stopPropagation()">
+    <!-- Header Fixo -->
+    <div class="modal-header">
+      <div class="header-main">
+        <div class="header-icon-badge" [class.edit-mode]="isEdit">
+          <span class="material-icons">{{ isEdit ? 'edit' : 'build' }}</span>
+        </div>
+        <div class="header-title-box">
+          <h2>{{ isEdit ? 'Editar Janela de Manutenção' : 'Nova Janela de Manutenção' }}</h2>
+          <p>{{ isEdit ? 'Atualize as datas e horários da manutenção.' : 'Cadastre o período em que alertas devem ser pausados.' }}</p>
+        </div>
+      </div>
+      <button type="button" class="close-btn" (click)="fecharModal()" title="Fechar">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="modal-body">
+      <div *ngIf="errorMessage" class="alert-feedback error">
+        <span class="material-icons">error_outline</span>
+        <span>{{ errorMessage }}</span>
+      </div>
+
+      <form (ngSubmit)="salvar()" class="form-container">
+        <!-- Grupo 1: Informações Gerais -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="material-icons section-icon color-blue">tune</span>
+            <h3>Configuração Geral</h3>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Nome da Manutenção <span class="required">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="formData.name"
+                name="name"
+                placeholder="Ex: Janela Semanal de Backup"
+                required
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Estratégia <span class="required">*</span></label>
+              <select [(ngModel)]="formData.strategy" name="strategy" class="custom-select" required>
+                <option value="once">Pontual (Data Início / Fim)</option>
+                <option value="weekly">Semanal Recorrente</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grupo 2: Horários Conforme Estratégia -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="material-icons section-icon color-emerald">schedule</span>
+            <h3>Horários da Manutenção</h3>
+          </div>
+
+          <!-- Campos Estratégia Pontual (once) -->
+          <div *ngIf="formData.strategy === 'once'" class="form-grid">
+            <div class="form-field">
+              <label>Data/Hora Início <span class="required">*</span></label>
+              <input
+                type="datetime-local"
+                [(ngModel)]="formData.start_at"
+                name="start_at"
+                required
+              />
+            </div>
+            <div class="form-field">
+              <label>Data/Hora Fim <span class="required">*</span></label>
+              <input
+                type="datetime-local"
+                [(ngModel)]="formData.end_at"
+                name="end_at"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Campos Estratégia Recorrente (weekly) -->
+          <div *ngIf="formData.strategy === 'weekly'" class="form-grid">
+            <div class="form-field col-span-2">
+              <label>Dias da Semana</label>
+              <div class="days-picker">
+                <button
+                  type="button"
+                  *ngFor="let d of diasSemana"
+                  class="day-btn"
+                  [class.selected]="isDiaSelecionado(d.id)"
+                  (click)="toggleDia(d.id)"
+                >
+                  {{ d.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label>Hora Inicial (HH:mm) <span class="required">*</span></label>
+              <input
+                type="time"
+                [(ngModel)]="formData.start_time"
+                name="start_time"
+                required
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Hora Final (HH:mm) <span class="required">*</span></label>
+              <input
+                type="time"
+                [(ngModel)]="formData.end_time"
+                name="end_time"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Grupo 3: Serviços Vinculados -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="material-icons section-icon color-sky">layers</span>
+            <h3>Serviços Afetados</h3>
+          </div>
+
+          <div class="form-field">
+            <label>Selecione os monitores abrangidos por esta manutenção:</label>
+            <div class="monitors-selection-grid">
+              <div
+                *ngFor="let s of todosMonitores"
+                class="monitor-select-card"
+                [class.selected]="isMonitorSelecionado(s.id)"
+                (click)="toggleMonitor(s.id)"
+              >
+                <span class="material-icons checkbox-icon">
+                  {{ isMonitorSelecionado(s.id) ? 'check_box' : 'check_box_outline_blank' }}
+                </span>
+                <span class="monitor-label">{{ s.name }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Fixed Footer -->
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="fecharModal()">Cancelar</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="salvar()"
+        [disabled]="loadingSalvar"
+      >
+        <span *ngIf="loadingSalvar" class="button-spinner"></span>
+        <span *ngIf="!loadingSalvar">{{ isEdit ? 'Atualizar Janela' : 'Salvar Janela' }}</span>
+        <span *ngIf="loadingSalvar">Salvando...</span>
+      </button>
+    </div>
+  </div>
+</div>

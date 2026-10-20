@@ -37,7 +37,9 @@ loadEnv(path.join(__dirname, '..', '..', '.env'));
 const { authMiddleware, AUTH_ENABLED } = require('./middleware/auth');
 const db = require('./utils/db');
 const syncManager = require('./utils/sync-manager');
+const http = require('http');
 const pm2Recorder = require('./utils/pm2-recorder');
+const { initMonitoring } = require('./monitoring');
 
 const authRouter = require('./routes/auth');
 const pm2Router = require('./routes/pm2');
@@ -45,10 +47,33 @@ const serversRouter = require('./routes/servers');
 const foldersRouter = require('./routes/folders');
 const usersRouter = require('./routes/users');
 const groupsRouter = require('./routes/groups');
+const monitorsRouter = require('./routes/monitors');
+const notificationsRouter = require('./routes/notifications');
+const maintenancesRouter = require('./routes/maintenances');
+const monitoringSettingsRouter = require('./routes/monitoringSettings');
+const pushRouter = require('./routes/push');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 6767;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// Intercepta server.emit('request') e server.emit('upgrade') no nível mais baixo do HTTP Server.
+// Isso garante que o Engine.IO (Socket.IO) veja a URL reescrita (/socket.io/...) ANTES de qualquer validação interna.
+const originalServerEmit = server.emit;
+server.emit = function (event, ...args) {
+  if (event === 'request' || event === 'upgrade') {
+    const req = args[0];
+    if (req && typeof req.url === 'string') {
+      if (req.url.startsWith('/pm2-manager/socket.io')) {
+        req.url = req.url.replace(/^\/pm2-manager\/socket\.io/, '/socket.io');
+      } else if (req.url.startsWith('/doce-manager/socket.io')) {
+        req.url = req.url.replace(/^\/doce-manager\/socket\.io/, '/socket.io');
+      }
+    }
+  }
+  return originalServerEmit.apply(this, [event, ...args]);
+};
 
 // Trust proxy reverse proxy headers (IIS ARR, Nginx, Apache)
 app.set('trust proxy', true);
@@ -72,12 +97,16 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Suporte a subcaminho /pm2-manager e /doce-manager
+// Suporte a subcaminho /pm2-manager e /doce-manager para API e Socket.IO
 app.use((req, res, next) => {
   if (req.url.startsWith('/pm2-manager/api')) {
     req.url = req.url.replace(/^\/pm2-manager\/api/, '/api');
   } else if (req.url.startsWith('/doce-manager/api')) {
     req.url = req.url.replace(/^\/doce-manager\/api/, '/api');
+  } else if (req.url.startsWith('/pm2-manager/socket.io')) {
+    req.url = req.url.replace(/^\/pm2-manager\/socket\.io/, '/socket.io');
+  } else if (req.url.startsWith('/doce-manager/socket.io')) {
+    req.url = req.url.replace(/^\/doce-manager\/socket\.io/, '/socket.io');
   }
   next();
 });
@@ -86,12 +115,19 @@ app.use((req, res, next) => {
 // Rotas públicas de autenticação
 app.use('/api/auth', authRouter);
 
+// Rotas públicas de push para heartbeats externos de tarefas e cron
+app.use('/api/push', pushRouter);
+
 // Rotas protegidas (ou com bypass local se AUTH desativado)
 app.use('/api', authMiddleware, pm2Router);
 app.use('/api/servers', authMiddleware, serversRouter);
 app.use('/api/folders', authMiddleware, foldersRouter);
 app.use('/api/users', authMiddleware, usersRouter);
 app.use('/api/groups', authMiddleware, groupsRouter);
+app.use('/api/monitors', authMiddleware, monitorsRouter);
+app.use('/api/notifications', authMiddleware, notificationsRouter);
+app.use('/api/maintenances', authMiddleware, maintenancesRouter);
+app.use('/api/settings', authMiddleware, monitoringSettingsRouter);
 
 // ─── Static Files & SPA Fallback ───────────────────────────────────────────────
 // O build do frontend fica em backend/public/browser ou backend/public
@@ -103,6 +139,19 @@ const publicCandidates = [
 ];
 
 let publicPath = publicCandidates.find(p => fs.existsSync(path.join(p, 'index.html'))) || publicCandidates[0];
+
+// Middleware de resolução direta de assets estáticos (evita 404 caso venha com prefixo de rota SPA aninhada)
+app.use((req, res, next) => {
+  const ext = path.extname(req.path);
+  if (ext && /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json)$/i.test(ext)) {
+    const fileName = path.basename(req.path);
+    const candidateFile = path.join(publicPath, fileName);
+    if (fs.existsSync(candidateFile)) {
+      return res.sendFile(candidateFile);
+    }
+  }
+  next();
+});
 
 app.use(express.static(publicPath, { index: false }));
 app.use('/pm2-manager', express.static(publicPath, { index: false }));
@@ -147,8 +196,10 @@ function sendIndexHtml(req, res) {
   fs.readFile(indexPath, 'utf8', (err, html) => {
     if (err) return res.status(500).send('Erro ao ler index.html');
     let modifiedHtml = html;
-    if (modifiedHtml.includes('<base')) {
+    if (/<base\s+href="[^"]*"\s*\/?>/i.test(modifiedHtml)) {
       modifiedHtml = modifiedHtml.replace(/<base\s+href="[^"]*"\s*\/?>/i, `<base href="${baseHref}">`);
+    } else if (/<head>/i.test(modifiedHtml)) {
+      modifiedHtml = modifiedHtml.replace(/<head>/i, `<head>\n  <base href="${baseHref}">`);
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(modifiedHtml);
@@ -173,20 +224,21 @@ app.get('*', (req, res) => {
 
 // ─── Inicialização do Servidor ────────────────────────────────────────────────
 db.initDB()
-  .then(() => {
+  .then(async () => {
     syncManager.initScheduler();
     pm2Recorder.initRecorder();
+    await initMonitoring(server);
 
-    app.listen(PORT, HOST, () => {
+    server.listen(PORT, HOST, () => {
       console.log(`\n  ██████╗ ███╗   ███╗██████╗      ██████╗ ██╗   ██╗██╗`);
       console.log(`  ██╔══██╗████╗ ████║╚════██╗    ██╔════╝ ██║   ██║██║`);
       console.log(`  ██████╔╝██╔████╔██║ █████╔╝    ██║  ███╗██║   ██║██║`);
       console.log(`  ██╔═══╝ ██║╚██╔╝██║██╔═══╝     ██║   ██║██║   ██║██║`);
       console.log(`  ██║     ██║ ╚═╝ ██║███████╗    ╚██████╔╝╚██████╔╝██║`);
       console.log(`  ╚═╝     ╚═╝     ╚═╝╚══════╝     ╚═════╝  ╚═════╝ ╚═╝\n`);
-      console.log(`  🚀 Servidor Integrado (PM2 + Gerenciador de Permissões)`);
+      console.log(`  🚀 Servidor Integrado (PM2 + Permissões + Uptime Monitor)`);
       console.log(`  🌐 Rodando em: http://${HOST}:${PORT}`);
-      console.log(`  📁 Banco de Dados: SQLite (backend/src/data/db.sqlite)`);
+      console.log(`  📁 Banco de Dados: SQLite (backend/src/data/db.sqlite & monitoramento.sqlite)`);
       console.log(`  🔐 Autenticação SSO: ${AUTH_ENABLED ? 'Ativa' : 'Bypass Local'}\n`);
     });
   })
@@ -195,5 +247,5 @@ db.initDB()
     process.exit(1);
   });
 
-module.exports = app;
+module.exports = server;
 

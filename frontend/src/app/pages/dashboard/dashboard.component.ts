@@ -29,6 +29,7 @@ import { ProcessMonitorModalComponent } from '../../components/process-monitor-m
 import { StartupModalComponent } from '../../components/startup-modal/startup-modal.component';
 import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
 import { ResourcePieChartComponent } from '../../components/resource-pie-chart/resource-pie-chart.component';
+import { AliasModalComponent } from '../../components/alias-modal/alias-modal.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -51,7 +52,7 @@ import { ResourcePieChartComponent } from '../../components/resource-pie-chart/r
     ProcessCardComponent,
     ProcessListComponent,
     LogDrawerComponent,
-    ResourcePieChartComponent,
+    ResourcePieChartComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
@@ -86,6 +87,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.processes().filter(p => {
       const matchQuery = !q ||
         p.name.toLowerCase().includes(q) ||
+        (p.alias && p.alias.toLowerCase().includes(q)) ||
         String(p.id).includes(q) ||
         p.status.toLowerCase().includes(q);
       const matchStatus = sf === 'all' || p.status === sf;
@@ -311,6 +313,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
       data: { processId: p.id },
       width: '700px',
       maxWidth: '95vw'
+    });
+  }
+
+  openAliasModal(p: Pm2Process): void {
+    const ref = this.dialog.open(AliasModalComponent, {
+      data: { process: p },
+      width: '540px',
+      maxWidth: '95vw',
+      disableClose: true
+    });
+
+    ref.afterClosed().subscribe(res => {
+      if (res?.updated) {
+        this.processes.update(procs => procs.map(item => {
+          if (item.name === p.name) {
+            return { ...item, alias: res.alias !== undefined ? res.alias : item.alias };
+          }
+          return item;
+        }));
+        this.refreshNow();
+      }
     });
   }
 

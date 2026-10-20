@@ -213,13 +213,13 @@
 
       <!-- Rodapé Fixo com Botão Loading -->
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="loadingSalvar">
+        <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="loadingSalvar()">
           Cancelar
         </button>
-        <button type="button" class="btn btn-primary" (click)="salvarServidor()" [disabled]="loadingSalvar || serverForm.invalid">
-          <mat-progress-spinner *ngIf="loadingSalvar" mode="indeterminate" diameter="18" class="button-spinner"></mat-progress-spinner>
-          <mat-icon *ngIf="!loadingSalvar">save</mat-icon>
-          <span>{{ loadingSalvar ? 'Testando Conexão e Salvando...' : (editingServer() ? 'Salvar Alterações' : 'Conectar e Salvar') }}</span>
+        <button type="button" class="btn btn-primary" (click)="salvarServidor()" [disabled]="loadingSalvar() || serverForm.invalid">
+          <mat-progress-spinner *ngIf="loadingSalvar()" mode="indeterminate" diameter="18" class="button-spinner"></mat-progress-spinner>
+          <mat-icon *ngIf="!loadingSalvar()">save</mat-icon>
+          <span>{{ loadingSalvar() ? 'Testando Conexão e Salvando...' : (editingServer() ? 'Salvar Alterações' : 'Conectar e Salvar') }}</span>
         </button>
       </div>
 
@@ -312,13 +312,13 @@ npm start</code></pre>
       </div>
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" (click)="closeDeleteModal()" [disabled]="loadingExcluir">
+        <button type="button" class="btn btn-secondary" (click)="closeDeleteModal()" [disabled]="loadingExcluir()">
           Cancelar
         </button>
-        <button type="button" class="btn btn-danger" (click)="executarExclusao()" [disabled]="loadingExcluir">
-          <mat-progress-spinner *ngIf="loadingExcluir" mode="indeterminate" diameter="18" class="button-spinner"></mat-progress-spinner>
-          <mat-icon *ngIf="!loadingExcluir">delete</mat-icon>
-          <span>{{ loadingExcluir ? 'Excluindo...' : 'Sim, Excluir' }}</span>
+        <button type="button" class="btn btn-danger" (click)="executarExclusao()" [disabled]="loadingExcluir()">
+          <mat-progress-spinner *ngIf="loadingExcluir()" mode="indeterminate" diameter="18" class="button-spinner"></mat-progress-spinner>
+          <mat-icon *ngIf="!loadingExcluir()">delete</mat-icon>
+          <span>{{ loadingExcluir() ? 'Excluindo...' : 'Sim, Excluir' }}</span>
         </button>
       </div>
     </div>

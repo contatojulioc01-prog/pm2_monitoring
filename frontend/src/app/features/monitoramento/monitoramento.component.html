@@ -1,0 +1,429 @@
+<div class="monitoring-container">
+  <!-- Sub-barra de Status do Monitoramento -->
+  <div class="monitoring-topbar">
+    <div class="topbar-status-info">
+      <div
+        class="connection-badge"
+        [class.connected]="monitoramentoService.socketService.connected()"
+        [matTooltip]="monitoramentoService.socketService.connected() ? 'Conectado em tempo real via WebSocket' : 'Reconectando ao servidor...'"
+      >
+        <span class="dot"></span>
+        <span>{{ monitoramentoService.socketService.connected() ? 'Ao Vivo (WebSocket)' : 'Desconectado' }}</span>
+      </div>
+
+      <div class="metrics-summary">
+        <span class="metric-chip chip-up"><mat-icon>check_circle</mat-icon> {{ upCount() }} UP</span>
+        <span class="metric-chip chip-down"><mat-icon>error</mat-icon> {{ downCount() }} DOWN</span>
+        <span class="metric-chip chip-pending" *ngIf="pendingCount() > 0"><mat-icon>hourglass_empty</mat-icon> {{ pendingCount() }} PENDING</span>
+        <span class="metric-chip chip-maint" *ngIf="maintenanceCount() > 0"><mat-icon>build</mat-icon> {{ maintenanceCount() }} MANUTENÇÃO</span>
+      </div>
+    </div>
+
+    <!-- Navegação de Seções Internas do Monitoramento -->
+    <nav class="monitoring-nav-links">
+      <a routerLink="/monitoramento/dashboard" routerLinkActive="active" class="m-nav-item">
+        <mat-icon>dashboard</mat-icon>
+        <span>Dashboard</span>
+      </a>
+      <a routerLink="/monitoramento/notifications" routerLinkActive="active" class="m-nav-item">
+        <mat-icon>notifications_active</mat-icon>
+        <span>Canais & Alertas MD</span>
+      </a>
+      <a routerLink="/monitoramento/maintenances" routerLinkActive="active" class="m-nav-item">
+        <mat-icon>build_circle</mat-icon>
+        <span>Manutenção</span>
+      </a>
+      <a routerLink="/monitoramento/settings" routerLinkActive="active" class="m-nav-item">
+        <mat-icon>settings</mat-icon>
+        <span>Ajustes</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- Corpo Principal: Sidebar + Conteúdo -->
+  <div class="monitoring-body">
+    <!-- Sidebar Esquerda com Lista de Monitores -->
+    <aside class="monitoring-sidebar">
+      <div class="sidebar-actions">
+        <div class="sidebar-buttons-row">
+          <button type="button" class="btn-new-monitor" (click)="abrirModalNovo()">
+            <mat-icon>add</mat-icon>
+            <span>Novo Monitor</span>
+          </button>
+          <button
+            type="button"
+            class="btn-new-group"
+            (click)="abrirModalNovoGrupo()"
+            matTooltip="Criar Grupo Personalizado com Mat-Icon"
+          >
+            <mat-icon>create_new_folder</mat-icon>
+            <span>Novo Grupo</span>
+          </button>
+        </div>
+
+        <div class="search-box">
+          <mat-icon class="search-icon">search</mat-icon>
+          <input
+            type="text"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="updateSearch($event)"
+            placeholder="Buscar serviço ou host..."
+            class="search-input"
+          />
+        </div>
+      </div>
+
+      <!-- Filtro de Grupo Rápido -->
+      <div class="sidebar-group-filter" *ngIf="gruposDisponiveis().length > 1">
+        <mat-icon class="group-select-icon">folder_open</mat-icon>
+        <select [ngModel]="selectedGroup()" (ngModelChange)="setGroupFilter($event)" class="sidebar-group-select">
+          <option value="all">Todos os Grupos ({{ totalCount() }})</option>
+          <option *ngFor="let g of gruposDisponiveis()" [value]="g.name">
+            {{ g.name }} ({{ g.count }})
+          </option>
+        </select>
+      </div>
+
+      <!-- Filtros de Status -->
+      <div class="filter-tabs">
+        <button
+          type="button"
+          class="filter-pill"
+          [class.active]="selectedFilter() === 'all'"
+          (click)="setFilter('all')"
+        >
+          Todos ({{ totalCount() }})
+        </button>
+        <button
+          type="button"
+          class="filter-pill pill-up"
+          [class.active]="selectedFilter() === 'up'"
+          (click)="setFilter('up')"
+        >
+          UP ({{ upCount() }})
+        </button>
+        <button
+          type="button"
+          class="filter-pill pill-down"
+          [class.active]="selectedFilter() === 'down'"
+          (click)="setFilter('down')"
+        >
+          DOWN ({{ downCount() }})
+        </button>
+        <button
+          type="button"
+          class="filter-pill pill-pending"
+          [class.active]="selectedFilter() === 'pending'"
+          (click)="setFilter('pending')"
+        >
+          PENDING ({{ pendingCount() }})
+        </button>
+      </div>
+
+      <!-- Lista Rolável de Grupos e Monitores com Drag & Drop Estável -->
+      <div class="monitor-list">
+        <!-- Estado Vazio Geral -->
+        <div *ngIf="monitoresFiltrados().length === 0 && gruposLocais.length === 0" class="empty-state">
+          <mat-icon>search_off</mat-icon>
+          <p>Nenhum monitor ou grupo encontrado.</p>
+        </div>
+
+        <!-- Lista de Grupos Arrastáveis (Isolada, aceita apenas reordenação de grupos) -->
+        <div
+          class="groups-drop-list"
+          cdkDropList
+          [cdkDropListData]="gruposLocais"
+          (cdkDropListDropped)="onGroupDrop($event)"
+          id="groups-master-list"
+        >
+          <div
+            *ngFor="let sec of gruposLocais; trackBy: trackByGroupId"
+            class="group-section-card"
+            cdkDrag
+            [cdkDragData]="sec"
+            (cdkDragStarted)="onDragStarted()"
+            (cdkDragEnded)="onDragEnded()"
+          >
+            <!-- Cabeçalho do Grupo com drag handle e mat-icon -->
+            <div class="group-header" (click)="toggleRecolherGrupo(sec.group.name)">
+              <div class="group-header-left">
+                <span
+                  class="group-drag-handle"
+                  cdkDragHandle
+                  matTooltip="Segure e arraste para reordenar o grupo"
+                  (click)="$event.stopPropagation()"
+                >
+                  <mat-icon>drag_indicator</mat-icon>
+                </span>
+                <div class="group-icon-badge">
+                  <mat-icon>{{ sec.group.icon || 'folder' }}</mat-icon>
+                </div>
+                <span class="group-name-title" [title]="sec.group.name">{{ sec.group.name }}</span>
+                <span class="group-count-badge">{{ sec.monitors.length }}</span>
+              </div>
+
+              <div class="group-header-actions" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  class="group-btn-action"
+                  matTooltip="Editar Grupo"
+                  (click)="abrirModalEditarGrupo(sec.group, $event)"
+                  *ngIf="sec.group.id"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  type="button"
+                  class="group-btn-action danger"
+                  matTooltip="Excluir Grupo"
+                  (click)="excluirGrupo(sec.group, $event)"
+                  *ngIf="sec.group.id"
+                >
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+                <mat-icon class="group-expand-icon">
+                  {{ isGrupoRecolhido(sec.group.name) ? 'expand_more' : 'expand_less' }}
+                </mat-icon>
+              </div>
+            </div>
+
+            <!-- Placeholder durante o arraste do grupo -->
+            <div class="group-drag-placeholder" *cdkDragPlaceholder></div>
+
+            <!-- Lista de Monitores dentro do Grupo (Conectada com as outras drop lists de monitores) -->
+            <div
+              class="group-monitors-list"
+              [class.collapsed]="isGrupoRecolhido(sec.group.name)"
+              cdkDropList
+              [id]="'group-drop-' + sanitizarId(sec.group.name)"
+              [cdkDropListConnectedTo]="monitorDropListIds"
+              [cdkDropListData]="sec.monitors"
+              (cdkDropListDropped)="onMonitorDrop($event, sec.group.name)"
+            >
+              <div class="group-empty-dropzone" *ngIf="sec.monitors.length === 0">
+                <mat-icon>move_to_inbox</mat-icon>
+                <span>Arraste monitores para este grupo</span>
+              </div>
+
+              <div
+                *ngFor="let m of sec.monitors; trackBy: trackByMonitorId"
+                class="monitor-item"
+                [class.active]="isMonitorAtivo(m.id)"
+                cdkDrag
+                [cdkDragData]="m"
+                (cdkDragStarted)="onDragStarted()"
+                (cdkDragEnded)="onDragEnded()"
+                (click)="irParaDetalhes(m)"
+                (contextmenu)="onContextMenu($event, m)"
+                [matTooltip]="'Arraste para mover de grupo ou reordenar. Botão direito para opções.'"
+                draggable="false"
+                role="button"
+              >
+                <div class="monitor-main">
+                  <span
+                    class="monitor-drag-handle"
+                    cdkDragHandle
+                    matTooltip="Segure e arraste o monitor"
+                    (click)="$event.stopPropagation()"
+                  >
+                    <mat-icon>drag_indicator</mat-icon>
+                  </span>
+
+                  <div
+                    class="pulse-dot"
+                    [class.up]="m.status === 1"
+                    [class.down]="m.status === 0"
+                    [class.pending]="m.status === 2"
+                    [class.maintenance]="m.status === 3"
+                    [matTooltip]="m.status === 1 ? 'Operacional (UP)' : (m.status === 0 ? 'Fora do Ar (DOWN)' : 'Verificando...')"
+                  ></div>
+
+                  <div class="monitor-name-box">
+                    <span class="monitor-title" [title]="m.name">{{ m.name }}</span>
+                    <div class="monitor-meta-row">
+                      <span class="monitor-type">{{ m.type }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="monitor-ping" *ngIf="m.ping_ms !== undefined && m.ping_ms !== null">
+                  {{ m.ping_ms }}ms
+                </div>
+
+                <div class="monitor-drag-placeholder" *cdkDragPlaceholder></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Seção: Monitores Sem Grupo / Geral -->
+        <div class="group-section-card general-section">
+          <div class="group-header" (click)="toggleRecolherGrupo('Geral')">
+            <div class="group-header-left">
+              <div class="group-icon-badge general">
+                <mat-icon>layers</mat-icon>
+              </div>
+              <span class="group-name-title">Geral (Sem Grupo)</span>
+              <span class="group-count-badge">{{ semGrupoLocais.length }}</span>
+            </div>
+
+            <div class="group-header-actions">
+              <mat-icon class="group-expand-icon">
+                {{ isGrupoRecolhido('Geral') ? 'expand_more' : 'expand_less' }}
+              </mat-icon>
+            </div>
+          </div>
+
+          <div
+            class="group-monitors-list"
+            [class.collapsed]="isGrupoRecolhido('Geral')"
+            cdkDropList
+            id="group-drop-geral"
+            [cdkDropListConnectedTo]="monitorDropListIds"
+            [cdkDropListData]="semGrupoLocais"
+            (cdkDropListDropped)="onMonitorDrop($event, null)"
+          >
+            <div class="group-empty-dropzone" *ngIf="semGrupoLocais.length === 0">
+              <mat-icon>check_circle_outline</mat-icon>
+              <span>Nenhum monitor avulso sem grupo</span>
+            </div>
+
+            <div
+              *ngFor="let m of semGrupoLocais; trackBy: trackByMonitorId"
+              class="monitor-item"
+              [class.active]="isMonitorAtivo(m.id)"
+              cdkDrag
+              [cdkDragData]="m"
+              (cdkDragStarted)="onDragStarted()"
+              (cdkDragEnded)="onDragEnded()"
+              (click)="irParaDetalhes(m)"
+              (contextmenu)="onContextMenu($event, m)"
+              [matTooltip]="'Arraste para mover para um grupo. Botão direito para opções.'"
+              draggable="false"
+              role="button"
+            >
+              <div class="monitor-main">
+                <span
+                  class="monitor-drag-handle"
+                  cdkDragHandle
+                  matTooltip="Segure e arraste o monitor"
+                  (click)="$event.stopPropagation()"
+                >
+                  <mat-icon>drag_indicator</mat-icon>
+                </span>
+
+                <div
+                  class="pulse-dot"
+                  [class.up]="m.status === 1"
+                  [class.down]="m.status === 0"
+                  [class.pending]="m.status === 2"
+                  [class.maintenance]="m.status === 3"
+                  [matTooltip]="m.status === 1 ? 'Operacional (UP)' : (m.status === 0 ? 'Fora do Ar (DOWN)' : 'Verificando...')"
+                ></div>
+
+                <div class="monitor-name-box">
+                  <span class="monitor-title" [title]="m.name">{{ m.name }}</span>
+                  <div class="monitor-meta-row">
+                    <span class="monitor-type">{{ m.type }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="monitor-ping" *ngIf="m.ping_ms !== undefined && m.ping_ms !== null">
+                {{ m.ping_ms }}ms
+              </div>
+
+              <div class="monitor-drag-placeholder" *cdkDragPlaceholder></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Conteúdo Central / Rotas Filhas -->
+    <main class="monitoring-content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>
+
+<!-- Gatilho Invisível Posicionado nas Coordenadas do Clique do Mouse -->
+<div
+  style="visibility: hidden; position: fixed; pointer-events: none; z-index: 9999;"
+  [style.left]="contextMenuPosition.x"
+  [style.top]="contextMenuPosition.y"
+  [matMenuTriggerFor]="contextMenu"
+  #contextMenuTrigger="matMenuTrigger"
+></div>
+
+<!-- Menu Elegante Angular Material de Contexto (Botão Direito) -->
+<mat-menu #contextMenu="matMenu" class="modern-context-menu">
+  <div class="ctx-header" *ngIf="selectedContextMonitor">
+    <div class="ctx-title-row">
+      <span class="ctx-name" [title]="selectedContextMonitor.name">{{ selectedContextMonitor.name }}</span>
+      <span class="ctx-badge">{{ selectedContextMonitor.type }}</span>
+    </div>
+    <div class="ctx-sub" [title]="selectedContextMonitor.url || selectedContextMonitor.hostname || 'Host Local'">
+      {{ selectedContextMonitor.url || selectedContextMonitor.hostname || 'Host Local' }}
+    </div>
+  </div>
+
+  <!-- Ação: Ver Detalhes -->
+  <button mat-menu-item (click)="irParaDetalhes(selectedContextMonitor!)">
+    <mat-icon class="ctx-icon-details">analytics</mat-icon>
+    <span>Ver Detalhes & Gráficos</span>
+  </button>
+
+  <!-- Ação: Testar Conexão Imediata -->
+  <button mat-menu-item (click)="testarMonitor(selectedContextMonitor!)">
+    <mat-icon class="ctx-icon-test">bolt</mat-icon>
+    <span>Testar Conexão Agora</span>
+  </button>
+
+  <!-- Ação: Pausar / Retomar -->
+  <button mat-menu-item (click)="togglePausa(selectedContextMonitor!)">
+    <mat-icon [class]="selectedContextMonitor?.active ? 'ctx-icon-pause' : 'ctx-icon-resume'">
+      {{ selectedContextMonitor?.active ? 'pause_circle' : 'play_circle' }}
+    </mat-icon>
+    <span>{{ selectedContextMonitor?.active ? 'Pausar Monitoramento' : 'Retomar Monitoramento' }}</span>
+  </button>
+
+  <!-- Ação: Editar -->
+  <button mat-menu-item (click)="abrirModalEditar(selectedContextMonitor!)">
+    <mat-icon class="ctx-icon-edit">edit</mat-icon>
+    <span>Editar Monitor</span>
+  </button>
+
+  <!-- Ação: Copiar Endereço / URL -->
+  <button
+    mat-menu-item
+    (click)="copiarEndereco(selectedContextMonitor!)"
+    *ngIf="selectedContextMonitor?.url || selectedContextMonitor?.hostname"
+  >
+    <mat-icon class="ctx-icon-copy">content_copy</mat-icon>
+    <span>Copiar Endereço</span>
+  </button>
+
+  <mat-divider></mat-divider>
+
+  <!-- Ação: Excluir Monitor -->
+  <button mat-menu-item (click)="excluirMonitor(selectedContextMonitor!)" class="ctx-item-danger">
+    <mat-icon class="ctx-icon-delete">delete_forever</mat-icon>
+    <span>Excluir Monitor</span>
+  </button>
+</mat-menu>
+
+<!-- Modal de Novo Monitor / Edição -->
+<app-monitor-form
+  *ngIf="modalMonitorAberto"
+  [monitorId]="editMonitorId"
+  (fechou)="fecharModalMonitor($event)"
+></app-monitor-form>
+
+<!-- Modal de Grupo Personalizado com Mat-Icon -->
+<app-group-form
+  *ngIf="modalGrupoAberto"
+  [group]="editGroup"
+  (fechou)="fecharModalGrupo($event)"
+></app-group-form>
+

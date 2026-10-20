@@ -1,0 +1,298 @@
+<div class="dashboard-container">
+  <!-- Cabeçalho -->
+  <div class="dashboard-header">
+    <div>
+      <h1>Painel de Controle de Monitoramento</h1>
+      <p>Visão geral em tempo real da integridade de serviços, servidores e e-mails</p>
+    </div>
+  </div>
+
+  <!-- Métricas Rápidas -->
+  <div class="metrics-grid">
+    <div class="metric-card card-total">
+      <div class="metric-content">
+        <span class="metric-label">Total de Serviços</span>
+        <span class="metric-value">{{ totalCount() }}</span>
+      </div>
+      <div class="metric-icon-box">
+        <mat-icon>dns</mat-icon>
+      </div>
+    </div>
+
+    <div class="metric-card card-up">
+      <div class="metric-content">
+        <span class="metric-label">Operacionais (UP)</span>
+        <span class="metric-value">{{ upCount() }}</span>
+      </div>
+      <div class="metric-icon-box">
+        <mat-icon>check_circle</mat-icon>
+      </div>
+    </div>
+
+    <div class="metric-card card-down">
+      <div class="metric-content">
+        <span class="metric-label">Fora do Ar (DOWN)</span>
+        <span class="metric-value">{{ downCount() }}</span>
+      </div>
+      <div class="metric-icon-box">
+        <mat-icon>error</mat-icon>
+      </div>
+    </div>
+
+    <div class="metric-card card-pending">
+      <div class="metric-content">
+        <span class="metric-label">Em Verificação</span>
+        <span class="metric-value">{{ pendingCount() }}</span>
+      </div>
+      <div class="metric-icon-box">
+        <mat-icon>hourglass_top</mat-icon>
+      </div>
+    </div>
+
+    <div class="metric-card card-uptime">
+      <div class="metric-content">
+        <span class="metric-label">Disponibilidade Geral</span>
+        <span class="metric-value">{{ overallUptime() }}%</span>
+      </div>
+      <div class="metric-icon-box">
+        <mat-icon>speed</mat-icon>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incidentes em Andamento -->
+  <div class="incidents-card">
+    <div class="incidents-header">
+      <h2>
+        <mat-icon [style.color]="activeIncidents().length > 0 ? '#ef4444' : '#10b981'">
+          {{ activeIncidents().length > 0 ? 'warning' : 'verified' }}
+        </mat-icon>
+        <span>Incidentes Ativos</span>
+      </h2>
+    </div>
+
+    <div *ngIf="activeIncidents().length === 0" class="all-operational-banner">
+      <mat-icon>check_circle</mat-icon>
+      <div>
+        <div class="all-operational-title">Todos os serviços monitorados estão 100% operacionais</div>
+        <div class="all-operational-sub">Nenhum incidente ativo ou degradação detectada no momento.</div>
+      </div>
+    </div>
+
+    <div *ngIf="activeIncidents().length > 0" class="incidents-list">
+      <div *ngFor="let inc of activeIncidents()" class="incident-item">
+        <div class="incident-info">
+          <mat-icon class="incident-icon">error_outline</mat-icon>
+          <div>
+            <div class="incident-service-name">{{ getMonitorName(inc.monitor_id) }}</div>
+            <div class="incident-cause">{{ inc.cause || 'Falha na resposta do serviço' }}</div>
+          </div>
+        </div>
+        <div class="incident-time">
+          Início: {{ inc.started_at }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grade de Serviços com Mini-Gráfico de Batimentos -->
+  <!-- Grade de Serviços com Agrupamento e Mini-Gráficos de Batimentos -->
+  <div class="services-section">
+    <div class="services-header-row">
+      <h2>Serviços Monitorados</h2>
+
+      <!-- Filtro rápido por Grupo -->
+      <div class="groups-filter-bar" *ngIf="gruposDisponiveis().length > 1">
+        <button
+          type="button"
+          class="group-filter-btn"
+          [class.active]="selectedGroupFilter() === 'all'"
+          (click)="setGroupFilter('all')"
+        >
+          <mat-icon class="group-btn-icon">apps</mat-icon>
+          <span>Todos ({{ totalCount() }})</span>
+        </button>
+        <button
+          type="button"
+          *ngFor="let g of gruposDisponiveis()"
+          class="group-filter-btn"
+          [class.active]="selectedGroupFilter() === g"
+          (click)="setGroupFilter(g)"
+        >
+          <mat-icon class="group-btn-icon">{{ getGroupIcon(g) }}</mat-icon>
+          <span>{{ g }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="monitores().length === 0" class="empty-services-banner">
+      <mat-icon>add_circle_outline</mat-icon>
+      <p>Nenhum serviço cadastrado ainda no sistema.</p>
+      <span>Clique em "+ Novo Monitor" no menu lateral para iniciar o monitoramento.</span>
+    </div>
+
+    <!-- Grupos de Serviços -->
+    <div class="groups-container" *ngIf="monitores().length > 0">
+      <div class="group-card-section" *ngFor="let group of gruposAgrupados()">
+        <!-- Cabeçalho do Grupo -->
+        <div class="group-header" (click)="toggleGroupCollapse(group.name)">
+          <div class="group-header-left">
+            <mat-icon class="group-icon">{{ getGroupIcon(group.name) }}</mat-icon>
+            <h3 class="group-title">{{ group.name }}</h3>
+            <span class="group-count-badge">{{ group.total }} {{ group.total === 1 ? 'serviço' : 'serviços' }}</span>
+          </div>
+
+          <div class="group-header-right">
+            <div class="group-status-chips">
+              <span class="g-chip up" *ngIf="group.up > 0">
+                <span class="chip-dot"></span> {{ group.up }} UP
+              </span>
+              <span class="g-chip down" *ngIf="group.down > 0">
+                <span class="chip-dot"></span> {{ group.down }} DOWN
+              </span>
+              <span class="g-chip pending" *ngIf="group.pending > 0">
+                <span class="chip-dot"></span> {{ group.pending }} PENDING
+              </span>
+              <span class="g-chip maint" *ngIf="group.maintenance > 0">
+                <span class="chip-dot"></span> {{ group.maintenance }} MANUTENÇÃO
+              </span>
+            </div>
+            <mat-icon class="collapse-icon">{{ isGroupCollapsed(group.name) ? 'expand_more' : 'expand_less' }}</mat-icon>
+          </div>
+        </div>
+
+        <!-- Cards do Grupo -->
+        <div class="services-grid" *ngIf="!isGroupCollapsed(group.name)">
+          <a
+            *ngFor="let m of group.monitors"
+            [routerLink]="['/monitoramento/monitors', m.id]"
+            class="service-card"
+            (contextmenu)="onContextMenu($event, m)"
+            [matTooltip]="'Botão direito: Pausar, Editar, Excluir, Testar'"
+          >
+            <div>
+              <div class="service-card-top">
+                <div style="min-width: 0;">
+                  <h3 class="service-title" [title]="m.name">{{ m.name }}</h3>
+                  <div class="service-url" [title]="m.url || m.hostname || m.type">
+                    {{ m.url || m.hostname || m.type }}
+                  </div>
+                </div>
+
+                <div
+                  class="status-badge"
+                  [class.up]="m.status === 1"
+                  [class.down]="m.status === 0"
+                  [class.pending]="m.status === 2"
+                  [class.maintenance]="m.status === 3"
+                >
+                  <div
+                    class="pulse-dot"
+                    [class.up]="m.status === 1"
+                    [class.down]="m.status === 0"
+                    [class.pending]="m.status === 2"
+                    [class.maintenance]="m.status === 3"
+                  ></div>
+                  <span>{{ m.status === 1 ? 'UP' : (m.status === 0 ? 'DOWN' : (m.status === 2 ? 'PENDING' : 'MANUTENÇÃO')) }}</span>
+                </div>
+              </div>
+
+              <!-- Mini barra com os últimos batimentos -->
+              <div class="mini-beats-bar" [title]="'Últimos ' + getBeats(m.id).length + ' batimentos'">
+                <div
+                  *ngFor="let b of getBeats(m.id)"
+                  class="beat-pill"
+                  [class.up]="b.status === 1"
+                  [class.down]="b.status === 0"
+                  [class.pending]="b.status === 2"
+                  [class.maintenance]="b.status === 3"
+                  [title]="b.time + ' | ' + (b.ping_ms ? b.ping_ms + 'ms' : '') + ' | ' + (b.msg || '')"
+                ></div>
+                <span *ngIf="getBeats(m.id).length === 0" class="no-beats-msg">Aguardando batimentos...</span>
+              </div>
+            </div>
+
+            <div class="service-card-bottom">
+              <span>Latência: <strong class="service-latency">{{ m.ping_ms !== undefined && m.ping_ms !== null ? m.ping_ms + 'ms' : '-' }}</strong></span>
+              <span class="group-card-tag" *ngIf="m.group_name">📁 {{ m.group_name }}</span>
+              <span>Tipo: <strong style="text-transform: uppercase;">{{ m.type }}</strong></span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gatilho Invisível Posicionado nas Coordenadas do Clique do Mouse -->
+<div
+  style="visibility: hidden; position: fixed; pointer-events: none; z-index: 9999;"
+  [style.left]="contextMenuPosition.x"
+  [style.top]="contextMenuPosition.y"
+  [matMenuTriggerFor]="contextMenu"
+  #contextMenuTrigger="matMenuTrigger"
+></div>
+
+<!-- Menu Angular Material de Contexto (Botão Direito) -->
+<mat-menu #contextMenu="matMenu" class="modern-context-menu">
+  <div class="ctx-header" *ngIf="selectedContextMonitor">
+    <div class="ctx-title-row">
+      <span class="ctx-name" [title]="selectedContextMonitor.name">{{ selectedContextMonitor.name }}</span>
+      <span class="ctx-badge">{{ selectedContextMonitor.type }}</span>
+    </div>
+    <div class="ctx-sub" [title]="selectedContextMonitor.url || selectedContextMonitor.hostname || 'Host Local'">
+      {{ selectedContextMonitor.url || selectedContextMonitor.hostname || 'Host Local' }}
+    </div>
+  </div>
+
+  <!-- Ação: Ver Detalhes -->
+  <button mat-menu-item (click)="irParaDetalhes(selectedContextMonitor!)">
+    <mat-icon class="ctx-icon-details">analytics</mat-icon>
+    <span>Ver Detalhes & Gráficos</span>
+  </button>
+
+  <!-- Ação: Testar Conexão Imediata -->
+  <button mat-menu-item (click)="testarMonitor(selectedContextMonitor!)">
+    <mat-icon class="ctx-icon-test">bolt</mat-icon>
+    <span>Testar Conexão Agora</span>
+  </button>
+
+  <!-- Ação: Pausar / Retomar -->
+  <button mat-menu-item (click)="togglePausa(selectedContextMonitor!)">
+    <mat-icon [class]="selectedContextMonitor?.active ? 'ctx-icon-pause' : 'ctx-icon-resume'">
+      {{ selectedContextMonitor?.active ? 'pause_circle' : 'play_circle' }}
+    </mat-icon>
+    <span>{{ selectedContextMonitor?.active ? 'Pausar Monitoramento' : 'Retomar Monitoramento' }}</span>
+  </button>
+
+  <!-- Ação: Editar -->
+  <button mat-menu-item (click)="abrirModalEditar(selectedContextMonitor!)">
+    <mat-icon class="ctx-icon-edit">edit</mat-icon>
+    <span>Editar Monitor</span>
+  </button>
+
+  <!-- Ação: Copiar Endereço / URL -->
+  <button
+    mat-menu-item
+    (click)="copiarEndereco(selectedContextMonitor!)"
+    *ngIf="selectedContextMonitor?.url || selectedContextMonitor?.hostname"
+  >
+    <mat-icon class="ctx-icon-copy">content_copy</mat-icon>
+    <span>Copiar Endereço</span>
+  </button>
+
+  <mat-divider></mat-divider>
+
+  <!-- Ação: Excluir Monitor -->
+  <button mat-menu-item (click)="excluirMonitor(selectedContextMonitor!)" class="ctx-item-danger">
+    <mat-icon class="ctx-icon-delete">delete_forever</mat-icon>
+    <span>Excluir Monitor</span>
+  </button>
+</mat-menu>
+
+<!-- Modal de Edição de Monitor -->
+<app-monitor-form
+  *ngIf="modalMonitorAberto"
+  [monitorId]="editMonitorId"
+  (fechou)="fecharModalMonitor($event)"
+></app-monitor-form>

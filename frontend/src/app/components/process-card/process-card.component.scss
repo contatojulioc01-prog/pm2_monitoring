@@ -149,14 +149,95 @@
   padding: 0 16px 12px;
 }
 
+.proc-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.proc-title-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .proc-name {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+
+  &--alias {
+    color: #1e293b;
+    letter-spacing: -0.2px;
+  }
+}
+
+.proc-subname {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 0.74rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  .subname-icon {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  .subname-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #64748b;
+  }
+}
+
+.btn-alias-trigger {
+  background: transparent;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #94a3b8;
+  flex-shrink: 0;
+  margin-top: -2px;
+  transition: all 0.15s ease;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    color: #6366f1;
+    background: rgba(99, 102, 241, 0.08);
+  }
+
+  &.has-alias {
+    color: #6366f1;
+    background: rgba(99, 102, 241, 0.06);
+
+    &:hover {
+      background: rgba(99, 102, 241, 0.14);
+    }
+  }
 }
 
 .proc-meta {
@@ -456,6 +537,7 @@
     .icon-sky     { color: #0284c7 !important; }
     .icon-purple  { color: #a855f7 !important; }
     .icon-slate   { color: #64748b !important; }
+    .icon-amber   { color: #f59e0b !important; }
   }
 
   .menu-item--danger {

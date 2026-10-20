@@ -1,0 +1,415 @@
+<div class="modal-backdrop">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <!-- Fixed Header -->
+    <div class="modal-header">
+      <div class="header-left">
+        <div class="modal-badge-icon">
+          <mat-icon>{{ isEdit ? 'edit_note' : 'add_chart' }}</mat-icon>
+        </div>
+        <div class="header-title-box">
+          <h2>{{ isEdit ? 'Editar Monitor' : 'Novo Monitor' }}</h2>
+          <p>{{ isEdit ? 'Atualize as configurações da sonda e alertas.' : 'Configure um novo serviço, servidor, porta ou e-mail para monitoramento contínuo.' }}</p>
+        </div>
+      </div>
+      <button type="button" class="close-btn" (click)="fechar()" title="Fechar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="modal-body">
+      <div *ngIf="errorMessage" class="alert-feedback error">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMessage }}</span>
+      </div>
+
+      <div *ngIf="testResult" class="alert-feedback" [class.success]="testResult.ok" [class.error]="!testResult.ok">
+        <mat-icon>{{ testResult.ok ? 'check_circle' : 'error' }}</mat-icon>
+        <span><strong>Resultado da Sonda ({{ testResult.pingMs }}ms):</strong> {{ testResult.msg }}</span>
+      </div>
+
+      <form (ngSubmit)="salvar()" class="form-container">
+        <!-- GRUPO 1: Identificação Básica -->
+        <div class="form-card">
+          <div class="card-header">
+            <mat-icon class="section-icon color-blue">info</mat-icon>
+            <h3>Identificação Básica</h3>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Tipo de Monitoramento <span class="required">*</span></label>
+              <select [(ngModel)]="formData.type" (ngModelChange)="onTipoAlterado()" name="type" class="custom-select" required>
+                <option value="http">HTTP / HTTPS (Websites, APIs)</option>
+                <option value="tcp">Porta TCP (Serviços de Rede)</option>
+                <option value="ping">Ping ICMP (Servidores & Roteadores)</option>
+                <option value="dns">DNS (Resolução de Domínio)</option>
+                <option value="smtp">SMTP (Servidores de E-mail)</option>
+                <option value="database">Banco de Dados (PostgreSQL)</option>
+                <option value="push">Push (Heartbeat Passivo de Scripts)</option>
+                <option value="group">Grupo (Agrupador de Serviços)</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Nome do Serviço <span class="required">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="formData.name"
+                name="name"
+                placeholder="Ex: API Gateway Principal"
+                required
+              />
+            </div>
+
+            <!-- Campo Grupo / Categoria com os grupos da Sidebar -->
+            <div class="form-field col-span-2">
+              <label>Grupo / Categoria (Grupos criados na Barra Lateral)</label>
+              
+              <div class="sidebar-groups-selector">
+                <!-- Opção Sem Grupo (Geral) -->
+                <button
+                  type="button"
+                  class="sidebar-group-card"
+                  [class.active]="!formData.group_name"
+                  (click)="selecionarGrupo('')"
+                  matTooltip="Deixar como Geral / Sem grupo"
+                >
+                  <div class="s-group-badge general">
+                    <mat-icon>layers</mat-icon>
+                  </div>
+                  <span class="s-group-name">Geral (Sem Grupo)</span>
+                  <mat-icon class="s-group-check" *ngIf="!formData.group_name">check_circle</mat-icon>
+                </button>
+
+                <!-- Grupos criados na sidebar com seus respectivos mat-icons -->
+                <button
+                  type="button"
+                  *ngFor="let g of gruposSidebar"
+                  class="sidebar-group-card"
+                  [class.active]="formData.group_name?.toLowerCase() === g.name.toLowerCase()"
+                  (click)="selecionarGrupo(g.name)"
+                  [matTooltip]="'Atribuir ao grupo: ' + g.name"
+                >
+                  <div class="s-group-badge">
+                    <mat-icon>{{ g.icon || 'folder' }}</mat-icon>
+                  </div>
+                  <span class="s-group-name" [title]="g.name">{{ g.name }}</span>
+                  <mat-icon class="s-group-check" *ngIf="formData.group_name?.toLowerCase() === g.name.toLowerCase()">check_circle</mat-icon>
+                </button>
+              </div>
+
+              <div class="group-selected-hint" *ngIf="formData.group_name">
+                <mat-icon>folder_special</mat-icon>
+                <span>Este monitor será exibido no grupo <strong>{{ formData.group_name }}</strong> na barra lateral.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- GRUPO 2: Configurações Específicas da Sonda -->
+        <div class="form-card">
+          <div class="card-header">
+            <mat-icon class="section-icon color-indigo">settings_input_component</mat-icon>
+            <h3>Configuração da Sonda: {{ formData.type | uppercase }}</h3>
+          </div>
+
+          <!-- Campos HTTP -->
+          <div *ngIf="formData.type === 'http'" class="form-grid">
+            <div class="form-field col-span-2">
+              <label>URL Completa do Alvo <span class="required">*</span></label>
+              <input
+                type="url"
+                [(ngModel)]="formData.url"
+                name="url"
+                placeholder="https://meuservico.com.br/health"
+                required
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Método HTTP</label>
+              <select [(ngModel)]="formData.method" name="method" class="custom-select">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="HEAD">HEAD</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Status Esperado</label>
+              <input
+                type="text"
+                [(ngModel)]="formData.expected_status"
+                name="expected_status"
+                placeholder="Ex: 200-299 ou 200,301"
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Palavra-chave na Resposta (Opcional)</label>
+              <input
+                type="text"
+                [(ngModel)]="formData.keyword"
+                name="keyword"
+                placeholder="Ex: status: 'ok'"
+              />
+            </div>
+
+            <div class="form-field">
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="formData.invert_keyword" name="invert_keyword" />
+                <span>Inverter Palavra-Chave (DOWN se encontrada)</span>
+              </label>
+            </div>
+
+            <div class="form-field col-span-2">
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="formData.cert_expiry_alert" name="cert_expiry_alert" />
+                <span>Alertar quando o Certificado TLS/SSL estiver próximo de expirar (30, 14, 7 dias)</span>
+              </label>
+            </div>
+
+            <div class="form-field col-span-2">
+              <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="formData.ignore_tls" name="ignore_tls" />
+                <span>Ignorar erros de SSL / TLS (certificados auto-assinados)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Campos TCP -->
+          <div *ngIf="formData.type === 'tcp'" class="form-grid">
+            <div class="form-field">
+              <label>Hostname / IP do Servidor <span class="required">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="formData.hostname"
+                name="hostname"
+                placeholder="Ex: 192.168.1.100 ou app.local"
+                required
+              />
+            </div>
+            <div class="form-field">
+              <label>Porta TCP <span class="required">*</span></label>
+              <input
+                type="number"
+                [(ngModel)]="formData.port"
+                name="port"
+                placeholder="Ex: 8080"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Campos PING -->
+          <div *ngIf="formData.type === 'ping'" class="form-grid">
+            <div class="form-field col-span-2">
+              <label>Hostname ou Endereço IP para Ping <span class="required">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="formData.hostname"
+                name="hostname"
+                placeholder="Ex: 8.8.8.8 ou gateway.local"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Campos DNS -->
+          <div *ngIf="formData.type === 'dns'" class="form-grid">
+            <div class="form-field">
+              <label>Hostname a ser resolvido <span class="required">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="formData.hostname"
+                name="hostname"
+                placeholder="Ex: google.com"
+                required
+              />
+            </div>
+            <div class="form-field">
+              <label>Valor Esperado no Registro (Opcional)</label>
+              <input
+                type="text"
+                [(ngModel)]="formData.keyword"
+                name="keyword"
+                placeholder="Ex: 142.250.190.46"
+              />
+            </div>
+          </div>
+
+          <!-- Campos SMTP (E-mail) -->
+          <div *ngIf="formData.type === 'smtp'" class="form-grid">
+            <div class="form-field">
+              <label>Host do Servidor SMTP <span class="required">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="formData.hostname"
+                name="hostname"
+                placeholder="smtp.exemplo.com"
+                required
+              />
+            </div>
+            <div class="form-field">
+              <label>Porta SMTP (25, 465 ou 587)</label>
+              <input
+                type="number"
+                [(ngModel)]="formData.port"
+                name="port"
+                placeholder="587"
+              />
+            </div>
+          </div>
+
+          <!-- Campos DATABASE -->
+          <div *ngIf="formData.type === 'database'" class="form-grid">
+            <div class="form-field col-span-2">
+              <label>String de Conexão PostgreSQL (Criptografada com AES-256-GCM)</label>
+              <input
+                type="text"
+                [(ngModel)]="dbConnectionString"
+                name="dbConn"
+                placeholder="postgresql://user:password@localhost:5432/nomedobanco"
+              />
+            </div>
+          </div>
+
+          <!-- Campos PUSH -->
+          <div *ngIf="formData.type === 'push'" class="form-field">
+            <div class="push-info-box">
+              <p>O monitor Push aguarda requisições HTTP do seu script ou cron. Se o sinal não for enviado dentro do intervalo, um alerta de DOWN é disparado.</p>
+              <div class="push-url-row" *ngIf="pushUrl">
+                <span class="push-url-code">{{ pushUrl }}</span>
+                <button
+                  type="button"
+                  class="copy-btn"
+                  [class.btn-copied]="urlCopiada"
+                  (click)="copiarPushUrl()"
+                >
+                  <mat-icon>{{ urlCopiada ? 'check' : 'content_copy' }}</mat-icon>
+                  <span>{{ urlCopiada ? 'Copiado!' : 'Copiar URL' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Campos GROUP -->
+          <div *ngIf="formData.type === 'group'" class="form-field">
+            <p class="group-info-text">
+              O status deste grupo será agregado automaticamente pelos serviços que o definirem como "Monitor Pai".
+            </p>
+          </div>
+        </div>
+
+        <!-- GRUPO 3: Intervalos, Dependência & Notificações -->
+        <div class="form-card">
+          <div class="card-header">
+            <mat-icon class="section-icon color-sky">notifications_active</mat-icon>
+            <h3>Intervalos & Canais de Alerta</h3>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Intervalo de Monitoramento (segundos)</label>
+              <input
+                type="number"
+                [(ngModel)]="formData.interval_s"
+                name="interval_s"
+                min="5"
+                placeholder="20"
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Intervalo de Retentativa em Falha (segundos)</label>
+              <input
+                type="number"
+                [(ngModel)]="formData.retry_interval_s"
+                name="retry_interval_s"
+                min="5"
+                placeholder="10"
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Máximo de Retentativas antes de DOWN</label>
+              <input
+                type="number"
+                [(ngModel)]="formData.max_retries"
+                name="max_retries"
+                min="0"
+                max="10"
+                placeholder="2"
+              />
+            </div>
+
+            <div class="form-field">
+              <label>Monitor Pai (Dependência / Grupo)</label>
+              <select [(ngModel)]="formData.parent_id" name="parent_id" class="custom-select">
+                <option [ngValue]="null">Nenhum (Independente)</option>
+                <option *ngFor="let p of outrosMonitores" [ngValue]="p.id">
+                  {{ p.name }}
+                </option>
+              </select>
+            </div>
+
+            <div class="form-field col-span-2">
+              <label>Canais de Notificação Vinculados</label>
+              <div *ngIf="canaisNotificacao.length === 0" class="no-notif-hint">
+                Nenhum canal cadastrado ainda. Crie um canal na aba "Canais & Alertas MD".
+              </div>
+              <div class="notifications-selection">
+                <div
+                  *ngFor="let n of canaisNotificacao"
+                  class="notif-card-option"
+                  [class.selected]="isNotifSelected(n.id)"
+                  (click)="toggleNotif(n.id)"
+                >
+                  <mat-icon [style.color]="isNotifSelected(n.id) ? '#4f46e5' : '#94a3b8'">
+                    {{ isNotifSelected(n.id) ? 'check_box' : 'check_box_outline_blank' }}
+                  </mat-icon>
+                  <div>
+                    <div class="notif-name">{{ n.name }}</div>
+                    <div class="notif-type">{{ n.type | uppercase }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Fixed Footer -->
+    <div class="modal-footer">
+      <div class="footer-left">
+        <button
+          type="button"
+          class="btn btn-test"
+          (click)="testar()"
+          [disabled]="loadingTestar"
+          matTooltip="Executa um teste imediato da sonda sem salvar"
+        >
+          <mat-spinner *ngIf="loadingTestar" diameter="16" class="btn-spinner"></mat-spinner>
+          <mat-icon *ngIf="!loadingTestar">network_check</mat-icon>
+          <span>{{ loadingTestar ? 'Testando...' : 'Testar Agora' }}</span>
+        </button>
+      </div>
+
+      <div class="footer-right">
+        <button type="button" class="btn btn-cancel" (click)="fechar()">Cancelar</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="salvar()"
+          [disabled]="loadingSalvar"
+        >
+          <mat-spinner *ngIf="loadingSalvar" diameter="16" class="btn-spinner"></mat-spinner>
+          <span>{{ loadingSalvar ? 'Salvando...' : (isEdit ? 'Atualizar Monitor' : 'Salvar Monitor') }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

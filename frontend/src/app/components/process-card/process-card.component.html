@@ -35,7 +35,31 @@
 
   <!-- Card body -->
   <div class="card-body">
-    <h3 class="proc-name" [matTooltip]="process.name">{{ process.name }}</h3>
+    <div class="proc-title-row">
+      <div class="proc-title-content">
+        @if (process.alias) {
+          <h3 class="proc-name proc-name--alias" [matTooltip]="'Apelido: ' + process.alias">
+            {{ process.alias }}
+          </h3>
+          <div class="proc-subname" [matTooltip]="'Nome no PM2: ' + process.name">
+            <mat-icon class="subname-icon">terminal</mat-icon>
+            <span class="subname-text font-mono">{{ process.name }}</span>
+          </div>
+        } @else {
+          <h3 class="proc-name" [matTooltip]="process.name">{{ process.name }}</h3>
+        }
+      </div>
+
+      <button
+        type="button"
+        class="btn-alias-trigger"
+        (click)="onEditAlias.emit(process); $event.stopPropagation()"
+        [matTooltip]="process.alias ? 'Alterar apelido' : 'Definir apelido'"
+        [class.has-alias]="!!process.alias"
+      >
+        <mat-icon>{{ process.alias ? 'label' : 'label_outline' }}</mat-icon>
+      </button>
+    </div>
 
     <div class="proc-meta">
       <div class="meta-row">
@@ -196,6 +220,11 @@
       <button mat-menu-item (click)="onDescribe.emit(process)">
         <mat-icon class="icon-slate">info</mat-icon>
         <span>Detalhes do processo (describe)</span>
+      </button>
+
+      <button mat-menu-item (click)="onEditAlias.emit(process)">
+        <mat-icon class="icon-amber">{{ process.alias ? 'label' : 'label_outline' }}</mat-icon>
+        <span>{{ process.alias ? 'Alterar apelido' : 'Definir apelido' }}</span>
       </button>
 
       <mat-divider></mat-divider>

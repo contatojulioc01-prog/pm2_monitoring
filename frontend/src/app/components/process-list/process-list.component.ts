@@ -165,17 +165,40 @@ import { Pm2Process } from '../../services/pm2.service';
             </th>
             <td mat-cell *matCellDef="let p">
               <div class="proc-name-cell">
-                <span class="cell-name">{{ p.name }}</span>
-                <span class="cell-mode-tag">{{ p.execMode }}</span>
-                @if (isMonitored(p)) {
-                  <span
-                    class="list-rec-badge"
-                    (click)="onMonitor.emit(p); $event.stopPropagation()"
-                    matTooltip="Gravação de monitoramento ativa (Clique para detalhes)"
-                  >
-                    <span class="rec-dot-pulse"></span> REC
-                  </span>
-                }
+                <div class="name-block">
+                  <div class="name-row-top">
+                    @if (p.alias) {
+                      <span class="cell-name cell-name--alias" [matTooltip]="'Apelido: ' + p.alias">{{ p.alias }}</span>
+                    } @else {
+                      <span class="cell-name" [matTooltip]="p.name">{{ p.name }}</span>
+                    }
+                    <button
+                      type="button"
+                      class="btn-alias-inline"
+                      (click)="onEditAlias.emit(p); $event.stopPropagation()"
+                      [matTooltip]="p.alias ? 'Alterar apelido' : 'Definir apelido'"
+                      [class.has-alias]="!!p.alias"
+                    >
+                      <mat-icon>{{ p.alias ? 'label' : 'label_outline' }}</mat-icon>
+                    </button>
+                    <span class="cell-mode-tag">{{ p.execMode }}</span>
+                    @if (isMonitored(p)) {
+                      <span
+                        class="list-rec-badge"
+                        (click)="onMonitor.emit(p); $event.stopPropagation()"
+                        matTooltip="Gravação de monitoramento ativa (Clique para detalhes)"
+                      >
+                        <span class="rec-dot-pulse"></span> REC
+                      </span>
+                    }
+                  </div>
+                  @if (p.alias) {
+                    <div class="name-subtext" [matTooltip]="'Nome no PM2: ' + p.name">
+                      <mat-icon class="subtext-icon">terminal</mat-icon>
+                      <span class="subtext-val font-mono">{{ p.name }}</span>
+                    </div>
+                  }
+                </div>
               </div>
             </td>
           </ng-container>
@@ -317,6 +340,10 @@ import { Pm2Process } from '../../services/pm2.service';
                   <button mat-menu-item (click)="onDescribe.emit(p)">
                     <mat-icon>info</mat-icon>
                     <span>Detalhes do processo</span>
+                  </button>
+                  <button mat-menu-item (click)="onEditAlias.emit(p)">
+                    <mat-icon class="icon-amber">{{ p.alias ? 'label' : 'label_outline' }}</mat-icon>
+                    <span>{{ p.alias ? 'Alterar apelido' : 'Definir apelido' }}</span>
                   </button>
                   <mat-divider></mat-divider>
                   <button mat-menu-item (click)="onDelete.emit(p)" class="danger-item">
@@ -650,11 +677,84 @@ import { Pm2Process } from '../../services/pm2.service';
       gap: 8px;
     }
 
+    .name-block {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .name-row-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .cell-name {
       font-weight: 600;
       font-size: 0.9rem;
       color: var(--text-primary);
       letter-spacing: -0.2px;
+
+      &--alias {
+        font-weight: 700;
+        color: #1e293b;
+      }
+    }
+
+    .btn-alias-inline {
+      background: transparent;
+      border: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #94a3b8;
+      padding: 0;
+      transition: all 0.15s ease;
+
+      mat-icon {
+        font-size: 15px;
+        width: 15px;
+        height: 15px;
+      }
+
+      &:hover {
+        color: #6366f1;
+        background: rgba(99, 102, 241, 0.08);
+      }
+
+      &.has-alias {
+        color: #6366f1;
+        background: rgba(99, 102, 241, 0.06);
+
+        &:hover {
+          background: rgba(99, 102, 241, 0.15);
+        }
+      }
+    }
+
+    .name-subtext {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      color: #64748b;
+
+      .subtext-icon {
+        font-size: 12px;
+        width: 12px;
+        height: 12px;
+        color: #94a3b8;
+      }
+
+      .subtext-val {
+        color: #64748b;
+        letter-spacing: -0.2px;
+      }
     }
 
     .cell-mode-tag {
@@ -918,6 +1018,11 @@ import { Pm2Process } from '../../services/pm2.service';
       mat-icon { color: #ef4444 !important; }
     }
 
+    ::ng-deep .icon-amber {
+      color: #f59e0b !important;
+      mat-icon { color: #f59e0b !important; }
+    }
+
     ::ng-deep .mat-mdc-menu-item,
     ::ng-deep .mat-mdc-menu-item .mdc-list-item__primary-text {
       font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
@@ -928,14 +1033,15 @@ import { Pm2Process } from '../../services/pm2.service';
 export class ProcessListComponent {
   @Input() processes: Pm2Process[] = [];
   @Input() activeMonitors: any[] = [];
-  @Output() onStart    = new EventEmitter<Pm2Process>();
-  @Output() onStop     = new EventEmitter<Pm2Process>();
-  @Output() onRestart  = new EventEmitter<Pm2Process>();
-  @Output() onReload   = new EventEmitter<Pm2Process>();
-  @Output() onDelete   = new EventEmitter<Pm2Process>();
-  @Output() onLogs     = new EventEmitter<Pm2Process>();
-  @Output() onDescribe = new EventEmitter<Pm2Process>();
-  @Output() onMonitor  = new EventEmitter<Pm2Process>();
+  @Output() onStart     = new EventEmitter<Pm2Process>();
+  @Output() onStop      = new EventEmitter<Pm2Process>();
+  @Output() onRestart   = new EventEmitter<Pm2Process>();
+  @Output() onReload    = new EventEmitter<Pm2Process>();
+  @Output() onDelete    = new EventEmitter<Pm2Process>();
+  @Output() onLogs      = new EventEmitter<Pm2Process>();
+  @Output() onDescribe  = new EventEmitter<Pm2Process>();
+  @Output() onMonitor   = new EventEmitter<Pm2Process>();
+  @Output() onEditAlias = new EventEmitter<Pm2Process>();
 
   columns = ['id', 'name', 'status', 'cpu', 'memory', 'restarts', 'uptime', 'mode', 'actions'];
 
@@ -966,6 +1072,7 @@ export class ProcessListComponent {
     if (q) {
       list = list.filter(p =>
         p.name.toLowerCase().includes(q) ||
+        (p.alias && p.alias.toLowerCase().includes(q)) ||
         String(p.id).includes(q) ||
         String(p.pid).includes(q) ||
         (p.execPath && p.execPath.toLowerCase().includes(q))
@@ -994,9 +1101,12 @@ export class ProcessListComponent {
         case 'id':
           diff = Number(a.id) - Number(b.id);
           break;
-        case 'name':
-          diff = a.name.localeCompare(b.name);
+        case 'name': {
+          const nameA = (a.alias || a.name || '').toLowerCase();
+          const nameB = (b.alias || b.name || '').toLowerCase();
+          diff = nameA.localeCompare(nameB);
           break;
+        }
         case 'status':
           diff = a.status.localeCompare(b.status);
           break;

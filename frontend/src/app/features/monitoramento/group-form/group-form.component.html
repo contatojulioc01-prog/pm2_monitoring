@@ -1,0 +1,119 @@
+<div class="modal-backdrop">
+  <div class="modal-wrapper">
+    <!-- Header Fixo -->
+    <div class="modal-header">
+      <div class="header-main">
+        <div class="header-icon-badge" [class.edit-mode]="isEdit">
+          <mat-icon>{{ formData.icon || (isEdit ? 'edit' : 'create_new_folder') }}</mat-icon>
+        </div>
+        <div class="header-title-box">
+          <h2>{{ isEdit ? 'Editar Grupo' : 'Novo Grupo Personalizado' }}</h2>
+          <p>{{ isEdit ? 'Atualize o nome e ícone do grupo.' : 'Crie uma categoria para agrupar seus monitoramentos.' }}</p>
+        </div>
+      </div>
+      <button type="button" class="close-btn" (click)="fechar()" title="Fechar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="modal-body">
+      <!-- Alerta de Erro -->
+      <div class="error-banner" *ngIf="errorMessage">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMessage }}</span>
+      </div>
+
+      <form class="form-container" (ngSubmit)="salvar()">
+        <!-- Card de Configuração do Grupo -->
+        <div class="form-card">
+          <div class="card-header">
+            <mat-icon class="section-icon color-blue">category</mat-icon>
+            <h3>Definições do Grupo</h3>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field full-width">
+              <label for="groupName">Nome do Grupo <span class="required">*</span></label>
+              <input
+                id="groupName"
+                type="text"
+                [(ngModel)]="formData.name"
+                name="groupName"
+                placeholder="Ex: Servidores em Nuvem, E-mails Corporativos, APIs Externas..."
+                class="input-control"
+                maxlength="100"
+                required
+                autofocus
+              />
+              <span class="field-hint">Este nome aparecerá como separador na barra lateral.</span>
+            </div>
+
+            <!-- Preview do Grupo na Sidebar -->
+            <div class="form-field full-width">
+              <label>Pré-visualização na Barra Lateral</label>
+              <div class="group-preview-box">
+                <div class="preview-badge">
+                  <mat-icon class="preview-icon">{{ formData.icon || 'folder' }}</mat-icon>
+                  <span class="preview-name">{{ formData.name || 'Nome do Grupo' }}</span>
+                </div>
+                <span class="preview-tag">0 monitores</span>
+              </div>
+            </div>
+
+            <!-- Seletor de Ícone -->
+            <div class="form-field full-width">
+              <div class="icon-section-header">
+                <label>Ícone Representativo (Material Icon)</label>
+                <div class="icon-search-box">
+                  <mat-icon class="mini-search-icon">search</mat-icon>
+                  <input
+                    type="text"
+                    [(ngModel)]="iconSearch"
+                    name="iconSearch"
+                    placeholder="Filtrar ou digitar ícone..."
+                    class="icon-search-input"
+                  />
+                </div>
+              </div>
+
+              <div class="icons-grid">
+                <button
+                  type="button"
+                  *ngFor="let ic of filteredIcons"
+                  class="icon-choice-btn"
+                  [class.active]="formData.icon === ic"
+                  (click)="selecionarIcone(ic)"
+                  [matTooltip]="ic"
+                >
+                  <mat-icon>{{ ic }}</mat-icon>
+                  <span class="icon-label">{{ ic }}</span>
+                </button>
+              </div>
+              <span class="field-hint">
+                Selecione um ícone acima ou digite qualquer identificador do Material Design Icons no campo de busca.
+              </span>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Fixed Footer -->
+    <div class="modal-footer">
+      <button type="button" class="btn-cancel" (click)="fechar()" [disabled]="loadingSalvar">
+        Cancelar
+      </button>
+      <button type="button" class="btn-save" (click)="salvar()" [disabled]="loadingSalvar">
+        <mat-progress-spinner
+          *ngIf="loadingSalvar"
+          mode="indeterminate"
+          diameter="18"
+          class="button-spinner"
+        ></mat-progress-spinner>
+        <mat-icon *ngIf="!loadingSalvar">save</mat-icon>
+        <span>{{ loadingSalvar ? 'Salvando...' : (isEdit ? 'Atualizar Grupo' : 'Criar Grupo') }}</span>
+      </button>
+    </div>
+  </div>
+</div>

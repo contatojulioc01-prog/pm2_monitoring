@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -28,8 +28,8 @@ export class ServersComponent implements OnInit, OnDestroy {
   editingServer = signal<Server | null>(null);
 
   serverForm!: FormGroup;
-  loadingSalvar = false;
-  loadingExcluir = false;
+  loadingSalvar = signal<boolean>(false);
+  loadingExcluir = signal<boolean>(false);
   syncingServerIds = new Set<string>();
 
   // Exclusão / Confirmação
@@ -41,7 +41,8 @@ export class ServersComponent implements OnInit, OnDestroy {
   constructor(
     private fb: FormBuilder,
     private serversService: ServersService,
-    private toast: ToastService
+    private toast: ToastService,
+    private cdr: ChangeDetectorRef
   ) {
     this.initForm();
   }
@@ -110,30 +111,36 @@ export class ServersComponent implements OnInit, OnDestroy {
   }
 
   closeModal(): void {
-    if (this.loadingSalvar) return;
+    if (this.loadingSalvar()) return;
     this.showModal.set(false);
     this.editingServer.set(null);
   }
 
   salvarServidor(): void {
-    if (this.serverForm.invalid || this.loadingSalvar) return;
+    if (this.serverForm.invalid || this.loadingSalvar()) return;
 
-    this.loadingSalvar = true;
+    this.loadingSalvar.set(true);
+    this.cdr.detectChanges();
     const formValue = this.serverForm.value;
 
     const req$ = this.editingServer()
       ? this.serversService.updateServer(this.editingServer()!.id, formValue)
       : this.serversService.createServer(formValue);
 
-    req$.pipe(finalize(() => { this.loadingSalvar = false; }))
+    req$.pipe(finalize(() => {
+      this.loadingSalvar.set(false);
+      this.cdr.detectChanges();
+    }))
       .subscribe({
         next: () => {
           this.toast.success(this.editingServer() ? 'Servidor atualizado com sucesso!' : 'Servidor cadastrado com sucesso!');
           this.closeModal();
           this.loadServers();
+          this.cdr.detectChanges();
         },
         error: (err) => {
           this.toast.error(err.error?.error || err.message || 'Erro ao salvar servidor');
+          this.cdr.detectChanges();
         }
       });
   }
@@ -144,15 +151,20 @@ export class ServersComponent implements OnInit, OnDestroy {
     this.syncingServerIds.add(server.id);
     this.serversService.syncServer(server.id)
       .pipe(finalize(() => {
-        setTimeout(() => this.syncingServerIds.delete(server.id), 2000);
+        setTimeout(() => {
+          this.syncingServerIds.delete(server.id);
+          this.cdr.detectChanges();
+        }, 2000);
       }))
       .subscribe({
         next: () => {
           this.toast.info(`Sincronização iniciada para ${server.name}...`);
           this.refreshStatus();
+          this.cdr.detectChanges();
         },
         error: (err) => {
           this.toast.error('Erro ao disparar sincronização: ' + (err.error?.error || err.message));
+          this.cdr.detectChanges();
         }
       });
   }
@@ -160,31 +172,37 @@ export class ServersComponent implements OnInit, OnDestroy {
   confirmarExclusao(server: Server): void {
     this.serverToDelete.set(server);
     this.showDeleteModal.set(true);
+    this.cdr.detectChanges();
   }
 
   closeDeleteModal(): void {
-    if (this.loadingExcluir) return;
+    if (this.loadingExcluir()) return;
     this.showDeleteModal.set(false);
     this.serverToDelete.set(null);
+    this.cdr.detectChanges();
   }
 
   executarExclusao(): void {
     const srv = this.serverToDelete();
-    if (!srv || this.loadingExcluir) return;
+    if (!srv || this.loadingExcluir()) return;
 
-    this.loadingExcluir = true;
+    this.loadingExcluir.set(true);
+    this.cdr.detectChanges();
     this.serversService.deleteServer(srv.id)
       .pipe(finalize(() => {
-        this.loadingExcluir = false;
+        this.loadingExcluir.set(false);
         this.closeDeleteModal();
+        this.cdr.detectChanges();
       }))
       .subscribe({
         next: () => {
           this.toast.success(`Servidor "${srv.name}" removido com sucesso.`);
           this.loadServers();
+          this.cdr.detectChanges();
         },
         error: (err) => {
           this.toast.error('Erro ao excluir servidor: ' + (err.error?.error || err.message));
+          this.cdr.detectChanges();
         }
       });
   }

@@ -132,6 +132,15 @@ async function initDB() {
       FOREIGN KEY (sessionId) REFERENCES pm2_monitoring_sessions (id) ON DELETE CASCADE
     )
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS pm2_aliases (
+      processName TEXT PRIMARY KEY,
+      alias TEXT NOT NULL,
+      createdAt TEXT,
+      updatedAt TEXT
+    )
+  `);
 }
 
 module.exports = {

@@ -5,6 +5,34 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const pm2 = require('pm2');
+const db = require('../utils/db');
+
+function getLocalDateTime(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const h = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const s = pad(date.getSeconds());
+  return `${y}-${m}-${d}T${h}:${min}:${s}`;
+}
+
+const aliasesCache = new Map();
+async function loadAliases() {
+  try {
+    const rows = await db.all('SELECT processName, alias FROM pm2_aliases');
+    aliasesCache.clear();
+    for (const row of rows) {
+      if (row.processName && row.alias) {
+        aliasesCache.set(row.processName, row.alias);
+      }
+    }
+  } catch (e) {
+    // Banco pode estar sendo inicializado
+  }
+}
+loadAliases();
 
 // ─── Hardware Metrics Tracker (Amostragem em Background Desacoplada e Otimizada) ─
 let cachedCpuUsage = { usagePercent: 0, freePercent: 100, cores: os.cpus().length || 1, model: (os.cpus()[0]?.model || 'CPU').trim() };
@@ -148,10 +176,13 @@ function withPM2(fn) {
 function formatProcess(p) {
   const env = p.pm2_env || {};
   const monit = p.monit || {};
+  const procName = env.name || p.name || 'unknown';
+  const alias = aliasesCache.get(procName) || null;
   return {
     id: p.pm_id,
     pid: p.pid,
-    name: env.name || p.name || 'unknown',
+    name: procName,
+    alias: alias,
     status: env.status || 'unknown',
     cpu: monit.cpu || 0,
     memory: monit.memory || 0,
@@ -809,5 +840,75 @@ router.get('/process-monitor/process/:processName', async (req, res) => {
   }
 });
 
+// ─── PM2 Process Aliases (Apelidos) ──────────────────────────────────────────
+
+// GET /api/pm2/aliases
+router.get('/pm2/aliases', async (req, res) => {
+  try {
+    await loadAliases();
+    res.json({ success: true, data: Object.fromEntries(aliasesCache) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/pm2/aliases
+router.post('/pm2/aliases', async (req, res) => {
+  try {
+    const { processName, alias } = req.body || {};
+    if (!processName || typeof processName !== 'string') {
+      return res.status(400).json({ success: false, error: 'O nome do processo (processName) é obrigatório.' });
+    }
+    const pName = processName.trim();
+    const cleanAlias = typeof alias === 'string' ? alias.trim() : '';
+    const nowLocal = getLocalDateTime();
+
+    if (!cleanAlias) {
+      await db.run('DELETE FROM pm2_aliases WHERE processName = ?', [pName]);
+      aliasesCache.delete(pName);
+    } else {
+      await db.run(
+        `INSERT INTO pm2_aliases (processName, alias, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(processName) DO UPDATE SET alias = excluded.alias, updatedAt = excluded.updatedAt`,
+        [pName, cleanAlias, nowLocal, nowLocal]
+      );
+      aliasesCache.set(pName, cleanAlias);
+    }
+
+    cachedTelemetry = null;
+    setTimeout(() => triggerImmediateBroadcast(), 50);
+
+    res.json({
+      success: true,
+      message: cleanAlias ? `Apelido "${cleanAlias}" salvo para "${pName}".` : `Apelido removido de "${pName}".`,
+      data: { processName: pName, alias: cleanAlias || null }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/pm2/aliases/:processName
+router.delete('/pm2/aliases/:processName', async (req, res) => {
+  try {
+    const pName = decodeURIComponent(req.params.processName).trim();
+    await db.run('DELETE FROM pm2_aliases WHERE processName = ?', [pName]);
+    aliasesCache.delete(pName);
+
+    cachedTelemetry = null;
+    setTimeout(() => triggerImmediateBroadcast(), 50);
+
+    res.json({
+      success: true,
+      message: `Apelido de "${pName}" removido com sucesso.`,
+      data: { processName: pName, alias: null }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
+
 

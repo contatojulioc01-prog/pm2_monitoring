@@ -1,0 +1,65 @@
+<div class="settings-container">
+  <div class="settings-header">
+    <h1>Configurações do Sistema</h1>
+    <p>Ajuste os parâmetros de retenção de dados históricos e política de fuso horário operacional.</p>
+  </div>
+
+  <div *ngIf="feedbackMsg" class="alert-feedback" [class.success]="feedbackSuccess" [class.error]="!feedbackSuccess">
+    <span class="material-icons">{{ feedbackSuccess ? 'check_circle' : 'error_outline' }}</span>
+    <span>{{ feedbackMsg }}</span>
+  </div>
+
+  <!-- Grupo 1: Retenção & Fuso Horário -->
+  <div class="form-card">
+    <div class="card-header">
+      <span class="material-icons section-icon color-blue">tune</span>
+      <div>
+        <h3>Retenção de Dados & Timezone</h3>
+        <p class="section-subtitle">Defina o ciclo de expiração de dados brutos e garantia de timezone local.</p>
+      </div>
+    </div>
+
+    <form (ngSubmit)="salvarConfiguracoes()" class="form-grid">
+      <div class="form-field">
+        <label>Retenção de Batimentos Brutos (dias) <span class="required">*</span></label>
+        <input
+          type="number"
+          [(ngModel)]="configData.heartbeat_retention_days"
+          name="retention"
+          min="7"
+          max="365"
+          required
+        />
+        <small class="field-help">
+          Batimentos detalhados mais antigos que este prazo serão limpos automaticamente pelos jobs diários de expurgo.
+        </small>
+      </div>
+
+      <div class="form-field">
+        <label>Fuso Horário Operacional</label>
+        <input
+          type="text"
+          [(ngModel)]="configData.timezone"
+          name="timezone"
+          disabled
+          class="disabled-input"
+        />
+        <small class="field-help">
+          Padronizado estritamente em Horário Local do servidor (America/Sao_Paulo). Sem conversões para UTC.
+        </small>
+      </div>
+
+      <div class="col-span-2 form-footer">
+        <button
+          type="submit"
+          class="btn btn-primary"
+          [disabled]="loadingConfig || carregando"
+        >
+          <span *ngIf="loadingConfig" class="button-spinner"></span>
+          <span *ngIf="!loadingConfig">Salvar Parâmetros</span>
+          <span *ngIf="loadingConfig">Salvando...</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
