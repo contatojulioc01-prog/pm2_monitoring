@@ -34,6 +34,12 @@ dist/
 *.sqlite-wal
 *.sqlite-shm
 
+# Data & SQLite databases
+src/data/
+backend/src/data/
+**/src/data/
+*.sqlite
+
 # Deploy & sync tools
 .jw
 .jwdata/

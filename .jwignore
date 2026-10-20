@@ -4,3 +4,6 @@ node_modules/
 *.log
 teste.txt
 .jwignore
+src/data/
+backend/src/data/
+**/src/data/
