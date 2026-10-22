@@ -262,11 +262,11 @@
                         </td>
 
                         <td class="text-center">
-                          <span class="status-dot" [class.active]="p.read"></span>
+                          <span class="status-dot" [class.active]="p.read" [class.inactive]="!p.read" [matTooltip]="p.read ? 'Leitura permitida' : 'Sem leitura'"></span>
                         </td>
 
                         <td class="text-center">
-                          <span class="status-dot" [class.active]="p.write"></span>
+                          <span class="status-dot" [class.active]="p.write" [class.inactive]="!p.write" [matTooltip]="p.write ? 'Escrita permitida' : 'Sem escrita'"></span>
                         </td>
                       </tr>
                     }

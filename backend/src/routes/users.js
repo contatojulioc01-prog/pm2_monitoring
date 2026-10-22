@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../utils/db');
 const { isExcludedAccount } = require('../utils/excluded-accounts');
+const { filterRootPermissions } = require('../utils/permission-filter');
 
 const getLocalDateString = () => {
   const d = new Date();
@@ -88,7 +89,15 @@ router.get('/:id/permissions', async (req, res) => {
     }
 
     const permissions = await db.all(query, params);
-    res.json(permissions);
+
+    // Se solicitado 'raw=true', retorna a lista bruta sem consolidação
+    if (req.query.raw === 'true') {
+      return res.json(permissions);
+    }
+
+    // Retorna apenas a pasta raiz de cada ramo de acesso do usuário
+    const rootPermissions = filterRootPermissions(permissions);
+    res.json(rootPermissions);
 
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar permissões do usuário: ' + err.message });

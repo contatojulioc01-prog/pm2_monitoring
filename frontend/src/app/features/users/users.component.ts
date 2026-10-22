@@ -12,6 +12,7 @@ import { ToastService } from '../../services/toast.service';
 import { User, Server, Permission } from '../../models/models';
 
 import { isExcludedAccount } from '../../utils/account-filter';
+import { filterRootPermissions } from '../../utils/permission-filter';
 
 @Component({
   selector: 'app-users',
@@ -106,7 +107,7 @@ export class UsersComponent implements OnInit {
     this.usersService.getUserPermissions(user.id)
       .pipe(finalize(() => this.loadingUserPerms.set(false)))
       .subscribe({
-        next: (perms) => this.userPermissions.set(perms),
+        next: (perms) => this.userPermissions.set(filterRootPermissions(perms)),
         error: (err) => this.toast.error('Erro ao buscar permissões do usuário: ' + err.message)
       });
   }
