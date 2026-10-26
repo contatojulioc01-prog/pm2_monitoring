@@ -24,7 +24,6 @@ function testPing(monitor) {
       return resolve({
         ok: false,
         unreachable: true,
-        immediateDown: true,
         msg: `Host inválido para ping: "${host}".`,
         pingMs: 0,
         extra: { host }
@@ -54,7 +53,6 @@ function testPing(monitor) {
         resolve({
           ok: false,
           unreachable: true,
-          immediateDown: true,
           msg: `Tempo limite esgotado para o ping (${monitor.timeout_s || 5}s - Host inacessível).`,
           pingMs: Date.now() - startTime,
           extra: { timeout: true, host }
@@ -74,7 +72,6 @@ function testPing(monitor) {
         resolve({
           ok: false,
           unreachable: true,
-          immediateDown: true,
           msg: `Erro ao executar comando ping: ${err.message}`,
           pingMs: Date.now() - startTime,
           extra: { error: err.message, host }
@@ -127,7 +124,6 @@ function testPing(monitor) {
         return resolve({
           ok: false,
           unreachable: true,
-          immediateDown: true,
           msg: detailMsg,
           pingMs: elapsed,
           extra: {
@@ -141,7 +137,6 @@ function testPing(monitor) {
       resolve({
         ok: false,
         unreachable: true,
-        immediateDown: true,
         msg: `Exceção ao disparar ping: ${err.message}`,
         pingMs: Date.now() - startTime,
         extra: { error: err.message, host }

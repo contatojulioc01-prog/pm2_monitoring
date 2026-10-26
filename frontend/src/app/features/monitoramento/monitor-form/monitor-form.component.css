@@ -526,3 +526,47 @@
   width: 16px;
   height: 16px;
 }
+
+.field-hint-text {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 3px;
+  line-height: 1.35;
+}
+
+.retry-explanation-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: #166534;
+  line-height: 1.45;
+  margin-top: 2px;
+  transition: all 0.2s ease;
+}
+
+.retry-explanation-box.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.retry-explanation-box mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.retry-text-content {
+  flex: 1;
+}
+
+.retry-text-content strong {
+  font-weight: 700;
+}

@@ -36,32 +36,22 @@ async function processHeartbeat(monitor, probeResult, failureCount = 0) {
     ? statusOverride
     : (probeOk ? 1 : 0);
 
-  // Regra: se o ping estiver constando inacessível (ou qualquer probe com immediateDown/unreachable),
-  // deve ser dado como DOWN (0) imediatamente sem passar pela fase intermediária de retentativas PENDING (2).
-  const isImmediateDown = Boolean(
-    probeResult.immediateDown ||
-    probeResult.unreachable ||
-    (monitor.type === 'ping' && currentProbeStatus === 0)
-  );
-
   let newFailureCount = failureCount;
   let finalStatus = 1;
+
+  const maxRetries = Number.isInteger(Number(monitor.max_retries)) && Number(monitor.max_retries) >= 0
+    ? Number(monitor.max_retries)
+    : 2;
 
   if (currentProbeStatus === 1) {
     newFailureCount = 0;
     finalStatus = 1;
   } else {
-    const maxRetries = monitor.max_retries || 2;
-    if (isImmediateDown) {
-      newFailureCount = maxRetries + 1;
-      finalStatus = 0; // DOWN imediato sem espera de retentativas
+    newFailureCount = failureCount + 1;
+    if (newFailureCount <= maxRetries) {
+      finalStatus = 2; // PENDING (aguarda quantidade de tentativas antes de alertar)
     } else {
-      newFailureCount = failureCount + 1;
-      if (newFailureCount <= maxRetries) {
-        finalStatus = 2; // PENDING
-      } else {
-        finalStatus = 0; // DOWN
-      }
+      finalStatus = 0; // DOWN (esgotou as tentativas configuradas, confirma queda)
     }
   }
 
@@ -78,7 +68,9 @@ async function processHeartbeat(monitor, probeResult, failureCount = 0) {
   }
 
   let beatMsg = probeResult.msg || '';
-  if (parentIsDown && finalStatus === 0) {
+  if (finalStatus === 2) {
+    beatMsg = `[Tentativa ${newFailureCount}/${maxRetries}] ${beatMsg}`;
+  } else if (parentIsDown && finalStatus === 0) {
     beatMsg = `[suprimido: pai DOWN] ${beatMsg}`;
   }
 

@@ -117,9 +117,19 @@
         <mat-icon class="icon-blue">timeline</mat-icon>
         <span>Histórico de Batimentos Recentes (Últimos {{ beats.length }})</span>
       </h3>
-      <span class="interval-tag">
-        Intervalo: {{ monitor.interval_s }}s
-      </span>
+      <div class="interval-tags-group">
+        <span class="interval-tag">
+          Intervalo: {{ monitor.interval_s }}s
+        </span>
+        <span
+          class="interval-tag"
+          *ngIf="monitor.max_retries !== undefined && monitor.max_retries !== null"
+          [matTooltip]="'Tentativas de verificação antes de alertar queda: ' + monitor.max_retries"
+        >
+          <mat-icon class="mini-tag-icon">replay</mat-icon>
+          {{ monitor.max_retries }} {{ monitor.max_retries === 1 ? 'tentativa' : 'tentativas' }}
+        </span>
+      </div>
     </div>
 
     <div class="beats-bar-wrapper">

@@ -256,13 +256,33 @@
 .icon-emerald { color: #10b981; }
 .icon-rose { color: #f43f5e; }
 
+.interval-tags-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .interval-tag {
+  display: inline-flex;
+  align-items: center;
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
   background: #f1f5f9;
-  padding: 2px 8px;
+  padding: 3px 8px;
   border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.mini-tag-icon {
+  font-size: 13px !important;
+  width: 13px !important;
+  height: 13px !important;
+  line-height: 13px;
+  vertical-align: middle;
+  margin-right: 3px;
+  color: #6366f1;
 }
 
 .beats-bar-wrapper {

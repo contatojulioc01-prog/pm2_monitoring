@@ -47,7 +47,7 @@ export class MonitorFormComponent implements OnInit {
     body: '',
     interval_s: 20,
     retry_interval_s: 10,
-    max_retries: 2,
+    max_retries: 3,
     resend_interval_min: 0,
     parent_id: null,
     notification_ids: [] as number[],
@@ -173,7 +173,7 @@ export class MonitorFormComponent implements OnInit {
             body: m.body || '',
             interval_s: m.interval_s || 20,
             retry_interval_s: m.retry_interval_s || 10,
-            max_retries: m.max_retries !== undefined ? m.max_retries : 2,
+            max_retries: m.max_retries !== undefined && m.max_retries !== null ? Number(m.max_retries) : 3,
             resend_interval_min: m.resend_interval_min || 0,
             parent_id: m.parent_id || null,
             notification_ids: m.notification_ids || [],
@@ -295,6 +295,9 @@ export class MonitorFormComponent implements OnInit {
 
     const payload = {
       ...this.formData,
+      interval_s: Math.max(5, Number(this.formData.interval_s) || 20),
+      retry_interval_s: Math.max(1, Number(this.formData.retry_interval_s) || 10),
+      max_retries: Math.max(0, Number(this.formData.max_retries !== undefined && this.formData.max_retries !== null ? this.formData.max_retries : 3)),
       group_name: this.formData.group_name && this.formData.group_name.trim() ? this.formData.group_name.trim() : null
     };
     if (this.formData.type === 'database') {

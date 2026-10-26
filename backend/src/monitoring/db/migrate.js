@@ -52,6 +52,22 @@ async function runMigrations() {
       logger.info('Coluna "order_index" adicionada à tabela "monitors".');
     }
 
+    const hasMaxRetries = await db.schema.hasColumn('monitors', 'max_retries');
+    if (!hasMaxRetries) {
+      await db.schema.alterTable('monitors', (table) => {
+        table.integer('max_retries').defaultTo(2);
+      });
+      logger.info('Coluna "max_retries" adicionada à tabela "monitors".');
+    }
+
+    const hasRetryInterval = await db.schema.hasColumn('monitors', 'retry_interval_s');
+    if (!hasRetryInterval) {
+      await db.schema.alterTable('monitors', (table) => {
+        table.integer('retry_interval_s').defaultTo(10);
+      });
+      logger.info('Coluna "retry_interval_s" adicionada à tabela "monitors".');
+    }
+
     // monitor_groups (Grupos Personalizados)
     const hasMonitorGroups = await db.schema.hasTable('monitor_groups');
     if (!hasMonitorGroups) {

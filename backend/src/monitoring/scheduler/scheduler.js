@@ -24,8 +24,11 @@ class Scheduler {
           .first();
 
         let initialFailures = 0;
-        if (lastBeat && (lastBeat.status === 0 || lastBeat.status === 2)) {
-          initialFailures = monitor.max_retries || 2;
+        if (lastBeat && lastBeat.status === 0) {
+          const maxRetries = Number.isInteger(Number(monitor.max_retries)) && Number(monitor.max_retries) >= 0
+            ? Number(monitor.max_retries)
+            : 2;
+          initialFailures = maxRetries + 1;
         }
 
         this.states.set(monitor.id, {

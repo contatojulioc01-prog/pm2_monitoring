@@ -312,47 +312,77 @@
 
           <div class="form-grid">
             <div class="form-field">
-              <label>Intervalo de Monitoramento (segundos)</label>
+              <label for="interval_s_input">Intervalo de Monitoramento (segundos)</label>
               <input
+                id="interval_s_input"
                 type="number"
                 [(ngModel)]="formData.interval_s"
                 name="interval_s"
                 min="5"
                 placeholder="20"
               />
+              <span class="field-hint-text">Frequência da checagem enquanto estiver online.</span>
             </div>
 
             <div class="form-field">
-              <label>Intervalo de Retentativa em Falha (segundos)</label>
+              <label for="retry_interval_s_input">Intervalo entre Tentativas em Falha (segundos)</label>
               <input
+                id="retry_interval_s_input"
                 type="number"
                 [(ngModel)]="formData.retry_interval_s"
                 name="retry_interval_s"
-                min="5"
+                min="1"
                 placeholder="10"
               />
+              <span class="field-hint-text">Tempo de espera entre cada retentativa.</span>
             </div>
 
             <div class="form-field">
-              <label>Máximo de Retentativas antes de DOWN</label>
+              <label for="max_retries_input">Quantidade de Tentativas antes do Alerta</label>
               <input
+                id="max_retries_input"
                 type="number"
                 [(ngModel)]="formData.max_retries"
                 name="max_retries"
                 min="0"
-                max="10"
-                placeholder="2"
+                max="60"
+                placeholder="3"
               />
+              <span class="field-hint-text">Número de verificações adicionais antes de alertar queda.</span>
             </div>
 
             <div class="form-field">
-              <label>Monitor Pai (Dependência / Grupo)</label>
-              <select [(ngModel)]="formData.parent_id" name="parent_id" class="custom-select">
+              <label for="parent_id_select">Monitor Pai (Dependência / Grupo)</label>
+              <select id="parent_id_select" [(ngModel)]="formData.parent_id" name="parent_id" class="custom-select">
                 <option [ngValue]="null">Nenhum (Independente)</option>
                 <option *ngFor="let p of outrosMonitores" [ngValue]="p.id">
                   {{ p.name }}
                 </option>
               </select>
+              <span class="field-hint-text">Suprime alertas se o serviço pai estiver fora do ar.</span>
+            </div>
+
+            <!-- Card explicativo dinâmico das tentativas antes do alerta -->
+            <div class="form-field col-span-2">
+              <div
+                class="retry-explanation-box"
+                [class.warning]="!formData.max_retries || formData.max_retries === 0"
+              >
+                <mat-icon *ngIf="formData.max_retries && formData.max_retries > 0">verified_user</mat-icon>
+                <mat-icon *ngIf="!formData.max_retries || formData.max_retries === 0">warning_amber</mat-icon>
+                <div class="retry-text-content">
+                  <ng-container *ngIf="formData.max_retries && formData.max_retries > 0">
+                    <strong>Prevenção de Falsos Alertas:</strong> Caso o monitor caia, ele tentará
+                    <strong>{{ formData.max_retries }} {{ formData.max_retries === 1 ? 'vez' : 'vezes' }}</strong>
+                    verificar se o serviço voltou (aguardando {{ formData.retry_interval_s || 10 }}s entre cada checagem).
+                    Se não conseguir contato após todas as tentativas, aí sim confirmará a queda (DOWN) e notificará nos canais configurados (Telegram).
+                  </ng-container>
+                  <ng-container *ngIf="!formData.max_retries || formData.max_retries === 0">
+                    <strong>Alerta Imediato (Sem Retentativas):</strong> Qualquer oscilação transitória ou falha momentânea
+                    marcará o monitor como DOWN e disparará o alerta imediatamente na 1ª falha.
+                  </ng-container>
+                </div>
+              </div>
             </div>
 
             <div class="form-field col-span-2">
