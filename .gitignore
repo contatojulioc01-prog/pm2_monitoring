@@ -40,6 +40,24 @@ backend/src/data/
 **/src/data/
 *.sqlite
 
+# PM2 & Runtime processes
+.pm2/
+dump.pm2
+*.pid
+*.seed
+
+# SSL / TLS certificates and private keys
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
 # Deploy & sync tools
 .jw
 .jwdata/
@@ -58,6 +76,7 @@ backend/src/data/
 *.njsproj
 *.sln
 *.sw?
+*.code-workspace
 
 # OS generated files
 .DS_Store
@@ -68,4 +87,3 @@ backend/src/data/
 ehthumbs.db
 Thumbs.db
 
-backend/src/data/monitoramento.sqlite
