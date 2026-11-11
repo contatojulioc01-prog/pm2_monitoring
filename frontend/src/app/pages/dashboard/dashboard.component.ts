@@ -30,6 +30,7 @@ import { StartupModalComponent } from '../../components/startup-modal/startup-mo
 import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
 import { ResourcePieChartComponent } from '../../components/resource-pie-chart/resource-pie-chart.component';
 import { AliasModalComponent } from '../../components/alias-modal/alias-modal.component';
+import { HostMonitoringPanelComponent } from '../../components/host-monitoring-panel/host-monitoring-panel.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -52,7 +53,8 @@ import { AliasModalComponent } from '../../components/alias-modal/alias-modal.co
     ProcessCardComponent,
     ProcessListComponent,
     LogDrawerComponent,
-    ResourcePieChartComponent
+    ResourcePieChartComponent,
+    HostMonitoringPanelComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'

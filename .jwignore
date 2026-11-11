@@ -1,9 +1,11 @@
 node_modules/
 .jw
 .jwdata/
+.env
 *.log
-teste.txt
-.jwignore
+frontend/src/
+frontend/node_modules/
+frontend/.angular/
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm

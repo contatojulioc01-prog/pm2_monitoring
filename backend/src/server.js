@@ -1,6 +1,7 @@
 /**
  * DC — PM2 Web GUI & Gerenciador de Permissões
  * Backend Server Unificado (Node.js + Express + PM2 + SQLite)
+ * Build v2.0.1 (Express 5 Compatibility Update)
  */
 
 const express = require('express');
@@ -51,6 +52,7 @@ const monitorsRouter = require('./routes/monitors');
 const notificationsRouter = require('./routes/notifications');
 const maintenancesRouter = require('./routes/maintenances');
 const monitoringSettingsRouter = require('./routes/monitoringSettings');
+const hostRouter = require('./routes/host');
 const pushRouter = require('./routes/push');
 
 const app = express();
@@ -85,7 +87,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Api-Key', 'x-sync-token'],
   credentials: false
 }));
-app.options('*', cors());
+app.options('{*path}', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -117,6 +119,9 @@ app.use('/api/auth', authRouter);
 
 // Rotas públicas de push para heartbeats externos de tarefas e cron
 app.use('/api/push', pushRouter);
+
+// Rota pública/desacoplada de snapshot e status do host (permite alimentar o painel do host imediatamente)
+app.use('/api/host', hostRouter);
 
 // Rotas protegidas (ou com bypass local se AUTH desativado)
 app.use('/api', authMiddleware, pm2Router);
@@ -214,7 +219,7 @@ app.use((req, res, next) => {
 });
 
 // SPA Fallback
-app.get('*', (req, res) => {
+app.get('{*path}', (req, res) => {
   // Se for um arquivo com extensão que não foi encontrado, retorna 404 (evita erro de MIME)
   if (path.extname(req.path)) {
     return res.status(404).end();

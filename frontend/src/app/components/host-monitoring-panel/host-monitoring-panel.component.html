@@ -1,0 +1,1083 @@
+<div class="host-panel">
+  <!-- ════════════════════ CABEÇALHO DO PAINEL ════════════════════ -->
+  <div class="panel-header">
+    <div class="header-left">
+      <div class="header-badge" [class.header-badge--active]="session().active">
+        <mat-icon class="header-icon">{{ session().active ? 'sensors' : 'monitor_heart' }}</mat-icon>
+      </div>
+      <div class="header-info">
+        <div class="title-row">
+          <h2 class="panel-title">Monitor de Host do Windows & Tarefas</h2>
+          @if (session().active) {
+            <span class="pulse-chip" [class.pulse-chip--auto]="session().mode === 'auto_triggered'">
+              <span class="pulse-dot"></span>
+              {{ session().mode === 'auto_triggered' ? 'ALERTA AUTOMÁTICO ATIVO' : 'MONITORAMENTO EM TEMPO REAL' }}
+            </span>
+          }
+        </div>
+        <p class="panel-subtitle">
+          Leitura direta do Gerenciador de Tarefas do Windows (Task Manager) com correlação de PID para aplicações PM2
+        </p>
+      </div>
+    </div>
+
+    <!-- Navegação de Abas do Módulo -->
+    <div class="tab-switcher">
+      <button
+        type="button"
+        class="tab-btn"
+        [class.active]="activeTab === 'live'"
+        (click)="openLiveTab()"
+      >
+        <mat-icon>insights</mat-icon>
+        <span>Tempo Real</span>
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        [class.active]="activeTab === 'history'"
+        (click)="openHistoryTab()"
+      >
+        <mat-icon>history</mat-icon>
+        <span>Histórico de Monitoramentos</span>
+        @if (historySessions().length > 0) {
+          <span class="history-count-badge">{{ historySessions().length }}</span>
+        }
+      </button>
+    </div>
+
+    <!-- Controles Superiores -->
+    <div class="header-actions">
+      @if (!session().active) {
+        <button type="button" class="btn-primary-action" (click)="startMonitoring('manual_infinite')">
+          <mat-icon>play_arrow</mat-icon>
+          <span>Monitorar Agora</span>
+        </button>
+
+        <button type="button" class="btn-secondary-action" [matMenuTriggerFor]="timeMenu">
+          <mat-icon>timer</mat-icon>
+          <span>Tempo Específico</span>
+          <mat-icon class="arrow-icon">arrow_drop_down</mat-icon>
+        </button>
+
+        <mat-menu #timeMenu="matMenu" class="modern-context-menu">
+          <button mat-menu-item (click)="startMonitoring('manual_timed', 5)">
+            <mat-icon>schedule</mat-icon>
+            <span>5 minutos</span>
+          </button>
+          <button mat-menu-item (click)="startMonitoring('manual_timed', 10)">
+            <mat-icon>schedule</mat-icon>
+            <span>10 minutos</span>
+          </button>
+          <button mat-menu-item (click)="startMonitoring('manual_timed', 15)">
+            <mat-icon>schedule</mat-icon>
+            <span>15 minutos</span>
+          </button>
+          <button mat-menu-item (click)="startMonitoring('manual_timed', 30)">
+            <mat-icon>schedule</mat-icon>
+            <span>30 minutos</span>
+          </button>
+        </mat-menu>
+      } @else {
+        <div class="active-countdown">
+          @if (session().remainingSeconds !== null) {
+            <mat-icon class="clock-icon">hourglass_top</mat-icon>
+            <span class="countdown-val font-mono">{{ formatRemaining(session().remainingSeconds!) }}</span>
+          } @else {
+            <mat-icon class="clock-icon">all_inclusive</mat-icon>
+            <span class="countdown-val">Contínuo</span>
+          }
+        </div>
+
+        <button type="button" class="btn-stop-action" (click)="stopMonitoring()">
+          <mat-icon>stop</mat-icon>
+          <span>Parar Monitoramento</span>
+        </button>
+      }
+
+      <button type="button" class="btn-icon-action" (click)="toggleTriggerModal()" matTooltip="Configurar gatilho automático de sobrecarga (>= 90%)">
+        <mat-icon>tune</mat-icon>
+      </button>
+
+      <button type="button" class="btn-icon-action" (click)="refreshSnapshot()" [disabled]="refreshing()" matTooltip="Atualizar snapshot manual">
+        <mat-icon [class.spinning]="refreshing()">refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Banner de Gatilho Disparado -->
+  @if (session().active && session().triggerReason) {
+    <div class="trigger-alert-banner">
+      <mat-icon class="alert-icon">warning_amber</mat-icon>
+      <div class="alert-text">
+        <strong>Aviso de Sobrecarga Crítica:</strong> {{ session().triggerReason }}
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════ ABA 1: TEMPO REAL ════════════════════ -->
+  @if (activeTab === 'live') {
+    <!-- Cards de Recursos (Gauges) -->
+    @if (metrics(); as m) {
+      <div class="host-metrics-cards">
+        <!-- Card CPU Host -->
+        <div class="host-card" [class.alert]="m.globalCpu.usedPercent >= 75" [class.danger]="m.globalCpu.usedPercent >= 90">
+          <div class="card-top">
+            <div class="card-title-group">
+              <div class="icon-indicator icon-indicator--cpu">
+                <mat-icon>memory</mat-icon>
+              </div>
+              <div>
+                <span class="card-name">CPU Host (Windows)</span>
+                <span class="card-desc">{{ m.globalCpu.cores }} Núcleos · {{ m.globalCpu.model }}</span>
+              </div>
+            </div>
+            <span class="card-pct-badge font-mono" [class.alert]="m.globalCpu.usedPercent >= 75" [class.danger]="m.globalCpu.usedPercent >= 90">
+              {{ m.globalCpu.usedPercent.toFixed(1) }}%
+            </span>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-fill cpu-fill" [style.width.%]="m.globalCpu.usedPercent" [class.alert]="m.globalCpu.usedPercent >= 75" [class.danger]="m.globalCpu.usedPercent >= 90"></div>
+          </div>
+
+          <div class="card-bottom">
+            <span class="metric-footnote">Uso Real Computado via Task Manager</span>
+          </div>
+        </div>
+
+        <!-- Card RAM Host -->
+        <div class="host-card" [class.alert]="m.globalMemory.usedPercent >= 75" [class.danger]="m.globalMemory.usedPercent >= 90">
+          <div class="card-top">
+            <div class="card-title-group">
+              <div class="icon-indicator icon-indicator--ram">
+                <mat-icon>storage</mat-icon>
+              </div>
+              <div>
+                <span class="card-name">Memória RAM do Sistema</span>
+                <span class="card-desc">{{ m.globalMemory.usedGB }} GB de {{ m.globalMemory.totalGB }} GB em uso</span>
+              </div>
+            </div>
+            <span class="card-pct-badge font-mono text-purple" [class.alert]="m.globalMemory.usedPercent >= 75" [class.danger]="m.globalMemory.usedPercent >= 90">
+              {{ m.globalMemory.usedPercent.toFixed(1) }}%
+            </span>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-fill ram-fill" [style.width.%]="m.globalMemory.usedPercent" [class.alert]="m.globalMemory.usedPercent >= 75" [class.danger]="m.globalMemory.usedPercent >= 90"></div>
+          </div>
+
+          <div class="card-bottom">
+            <span class="metric-footnote">Livre: {{ (m.globalMemory.totalGB - m.globalMemory.usedGB).toFixed(2) }} GB</span>
+          </div>
+        </div>
+
+        <!-- Card Mapeamento PM2 vs Windows -->
+        <div class="host-card">
+          <div class="card-top">
+            <div class="card-title-group">
+              <div class="icon-indicator icon-indicator--tasks">
+                <mat-icon>dns</mat-icon>
+              </div>
+              <div>
+                <span class="card-name">Processos Ativos</span>
+                <span class="card-desc">{{ m.totalProcesses }} processos em execução no Windows</span>
+              </div>
+            </div>
+            <span class="card-pct-badge font-mono text-emerald">
+              {{ m.pm2Count }} PM2
+            </span>
+          </div>
+
+          <div class="task-stats-row">
+            <div class="stat-box">
+              <span class="stat-dot pm2"></span>
+              <span class="stat-text"><strong>{{ m.pm2Count }}</strong> instâncias vinculadas</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-dot win"></span>
+              <span class="stat-text"><strong>{{ m.totalProcesses - m.pm2Count }}</strong> processos nativos</span>
+            </div>
+          </div>
+
+          <div class="card-bottom">
+            <span class="metric-footnote">Identificação cruzada de PID em tempo real</span>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Tabela de Processos Estilizada -->
+    <div class="process-table-card">
+      <div class="table-filter-bar">
+        <div class="search-box">
+          <mat-icon class="search-icon">search</mat-icon>
+          <input
+            type="text"
+            placeholder="Filtrar por nome de aplicação, processo ou PID..."
+            [(ngModel)]="filterQuery"
+            class="search-input"
+          />
+          @if (filterQuery) {
+            <button type="button" class="btn-clear" (click)="filterQuery = ''">
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+
+        <div class="filter-actions">
+          <button
+            type="button"
+            class="filter-pill-btn"
+            [class.active]="filterOnlyPm2"
+            (click)="filterOnlyPm2 = !filterOnlyPm2"
+          >
+            <span class="pill-dot" [class.active]="filterOnlyPm2"></span>
+            <span>Apenas Aplicações PM2</span>
+          </button>
+
+          <span class="results-badge font-mono">
+            {{ groupedLiveProcesses().length }} aplicações ({{ metrics()?.processes?.length || 0 }} processos)
+          </span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="modern-table">
+          <thead>
+            <tr>
+              <th style="width: 84px;">Origem</th>
+              <th style="width: 110px;" class="sortable-header" (click)="toggleLiveSort('pid')">
+                <div class="header-sort-wrap">
+                  <span>PID</span>
+                  <mat-icon class="sort-icon" [class.active]="liveSortColumn() === 'pid'">
+                    {{ liveSortColumn() === 'pid' ? (liveSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                  </mat-icon>
+                </div>
+              </th>
+              <th class="sortable-header" (click)="toggleLiveSort('name')">
+                <div class="header-sort-wrap">
+                  <span>Aplicação / Processo (Unificado)</span>
+                  <mat-icon class="sort-icon" [class.active]="liveSortColumn() === 'name'">
+                    {{ liveSortColumn() === 'name' ? (liveSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                  </mat-icon>
+                </div>
+              </th>
+              <th style="width: 150px;" class="text-right sortable-header" (click)="toggleLiveSort('cpu')">
+                <div class="header-sort-wrap justify-end">
+                  <span>Uso de CPU</span>
+                  <mat-icon class="sort-icon" [class.active]="liveSortColumn() === 'cpu'">
+                    {{ liveSortColumn() === 'cpu' ? (liveSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                  </mat-icon>
+                </div>
+              </th>
+              <th style="width: 180px;" class="text-right sortable-header" (click)="toggleLiveSort('ram')">
+                <div class="header-sort-wrap justify-end">
+                  <span>Memória RAM</span>
+                  <mat-icon class="sort-icon" [class.active]="liveSortColumn() === 'ram'">
+                    {{ liveSortColumn() === 'ram' ? (liveSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                  </mat-icon>
+                </div>
+              </th>
+              <th style="width: 120px;" class="text-center">Instâncias</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (g of groupedLiveProcesses(); track g.groupKey) {
+              <!-- Linha Principal Unificada -->
+              <tr
+                class="parent-group-row"
+                [class.is-pm2-row]="g.isPm2"
+                [class.is-expanded]="isGroupExpanded(g.groupKey)"
+                (click)="g.instancesCount > 1 ? toggleGroupExpand(g.groupKey, $event) : null"
+              >
+                <!-- Origem -->
+                <td>
+                  @if (g.isPm2) {
+                    <span class="type-badge type-badge--pm2">PM2</span>
+                  } @else {
+                    <span class="type-badge type-badge--win">WIN</span>
+                  }
+                </td>
+
+                <!-- PID -->
+                <td>
+                  <div class="pid-cell-wrap">
+                    <span class="cell-pid font-mono">#{{ g.primaryPid }}</span>
+                    @if (g.instancesCount > 1) {
+                      <span class="pid-more-badge font-mono">+{{ g.instancesCount - 1 }}</span>
+                    }
+                  </div>
+                </td>
+
+                <!-- Nome da Aplicação Unificada com Botão de Agrupamento -->
+                <td>
+                  <div class="name-column">
+                    <div class="primary-row">
+                      <mat-icon class="app-row-icon" [class.pm2-icon]="g.isPm2">
+                        {{ g.isPm2 ? 'developer_board' : 'apps' }}
+                      </mat-icon>
+                      <span class="name-main" [class.highlight-name]="g.isPm2">{{ g.displayName }}</span>
+                      @if (g.isPm2) {
+                        <span class="mode-tag font-mono">Node.js</span>
+                      }
+
+                      <!-- Botão visual de agrupamento estilo referência -->
+                      @if (g.instancesCount > 1) {
+                        <button
+                          type="button"
+                          class="group-accordion-btn"
+                          [class.expanded]="isGroupExpanded(g.groupKey)"
+                          (click)="toggleGroupExpand(g.groupKey, $event)"
+                          [matTooltip]="isGroupExpanded(g.groupKey) ? 'Recolher instâncias' : 'Expandir ' + g.instancesCount + ' instâncias separadas'"
+                        >
+                          <mat-icon class="group-btn-icon">layers</mat-icon>
+                          <span>{{ g.instancesCount }} agrupadas</span>
+                          <mat-icon class="group-btn-chevron">{{ isGroupExpanded(g.groupKey) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                        </button>
+                      }
+                    </div>
+
+                    <div class="sub-row">
+                      @if (g.instancesCount > 1) {
+                        <span class="sub-counter font-mono">+{{ g.instancesCount - 1 }} instância(s) em execução</span>
+                      } @else if (g.isPm2 && g.instances[0]?.pm2Details?.name !== g.displayName) {
+                        <span class="name-sub font-mono">PM2 name: {{ g.instances[0]?.pm2Details?.name }}</span>
+                      } @else {
+                        <span class="name-sub font-mono">{{ g.processName }}.exe</span>
+                      }
+                    </div>
+                  </div>
+                </td>
+
+                <!-- CPU Total da Aplicação -->
+                <td class="text-right">
+                  <div class="metric-container justify-end">
+                    <span class="metric-number font-mono" [class.alert]="g.totalCpu >= 15" [class.danger]="g.totalCpu >= 30">
+                      {{ g.totalCpu.toFixed(1) }}%
+                    </span>
+                    <div class="mini-bar">
+                      <div class="mini-fill cpu" [style.width.%]="g.totalCpu > 100 ? 100 : (g.totalCpu * 2)" [class.alert]="g.totalCpu >= 15" [class.danger]="g.totalCpu >= 30"></div>
+                    </div>
+                  </div>
+                  @if (g.instancesCount > 1) {
+                    <span class="metric-sub-detail font-mono">total unificado</span>
+                  }
+                </td>
+
+                <!-- Memória RAM Total da Aplicação -->
+                <td class="text-right">
+                  <div class="ram-container justify-end">
+                    <span class="ram-value font-mono font-bold">{{ g.totalRamMB.toFixed(1) }} MB</span>
+                    <span class="ram-percent font-mono">({{ g.totalRamPercent.toFixed(1) }}%)</span>
+                  </div>
+                  @if (g.instancesCount > 1) {
+                    <span class="metric-sub-detail font-mono">soma de {{ g.instancesCount }}</span>
+                  }
+                </td>
+
+                <!-- Estado / Ação de Expansão -->
+                <td class="text-center">
+                  @if (g.instancesCount > 1) {
+                    <button
+                      type="button"
+                      class="btn-toggle-row"
+                      [class.expanded]="isGroupExpanded(g.groupKey)"
+                      (click)="toggleGroupExpand(g.groupKey, $event)"
+                      [matTooltip]="isGroupExpanded(g.groupKey) ? 'Ocultar instâncias' : 'Ver instâncias separadas'"
+                    >
+                      <mat-icon>{{ isGroupExpanded(g.groupKey) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                  } @else {
+                    <span class="status-chip status-chip--online">
+                      <span class="status-dot"></span>
+                      <span>1 ATIVA</span>
+                    </span>
+                  }
+                </td>
+              </tr>
+
+              <!-- SUB-ROWS: INSTÂNCIAS INDIVIDUAIS SEPARADAS COM O ESTILO DA IMAGEM (↳) -->
+              @if (isGroupExpanded(g.groupKey)) {
+                @for (inst of g.instances; track inst.pid; let idx = $index) {
+                  <tr class="child-instance-row">
+                    <!-- Origem em branco -->
+                    <td class="child-blank-cell"></td>
+
+                    <!-- PID Individual -->
+                    <td>
+                      <span class="child-pid-badge font-mono">#{{ inst.pid }}</span>
+                    </td>
+
+                    <!-- Detalhes da Instância Individual (Estilo ↳ da Imagem) -->
+                    <td>
+                      <div class="child-instance-content">
+                        <span class="sub-arrow">↳</span>
+                        <span class="child-sess-label">Instância #{{ idx + 1 }}</span>
+                        <span class="child-badge-pill font-mono">PID: {{ inst.pid }}</span>
+                        @if (inst.isPm2 && inst.pm2Details?.pm_id !== undefined) {
+                          <span class="child-pm2-tag font-mono">pm_id: {{ inst.pm2Details.pm_id }}</span>
+                        } @else {
+                          <span class="child-exe font-mono">{{ inst.processName }}.exe</span>
+                        }
+                      </div>
+                    </td>
+
+                    <!-- CPU Individual -->
+                    <td class="text-right">
+                      <span class="child-metric font-mono font-bold" [class.alert]="inst.cpuPercent >= 15" [class.danger]="inst.cpuPercent >= 30">
+                        {{ inst.cpuPercent.toFixed(1) }}%
+                      </span>
+                    </td>
+
+                    <!-- RAM Individual -->
+                    <td class="text-right">
+                      <span class="child-metric font-mono text-purple">
+                        {{ inst.memMB.toFixed(1) }} MB
+                      </span>
+                      <span class="child-sub-metric font-mono">({{ inst.memPercent.toFixed(1) }}%)</span>
+                    </td>
+
+                    <!-- Status -->
+                    <td class="text-center">
+                      <span class="child-online-indicator" matTooltip="Instância em execução"></span>
+                    </td>
+                  </tr>
+                }
+              }
+            } @empty {
+              <tr>
+                <td colspan="6" class="empty-state-cell">
+                  @if (refreshing()) {
+                    <div class="loading-state">
+                      <mat-spinner diameter="28"></mat-spinner>
+                      <span>Carregando dados dos processos no Task Manager...</span>
+                    </div>
+                  } @else {
+                    <div class="no-data-state">
+                      <mat-icon>filter_alt_off</mat-icon>
+                      <span>Nenhum processo corresponde aos filtros aplicados.</span>
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════ ABA 2: HISTÓRICO DE MONITORAMENTOS ════════════════════ -->
+  @if (activeTab === 'history') {
+    <div class="history-view">
+      <!-- Toolbar do Histórico -->
+      <div class="history-toolbar">
+        <div class="toolbar-left-group">
+          <div class="filter-pills">
+            <button
+              type="button"
+              class="history-pill"
+              [class.active]="historyModeFilter() === 'all'"
+              (click)="setHistoryFilter('all')"
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              class="history-pill"
+              [class.active]="historyModeFilter() === 'auto_triggered'"
+              (click)="setHistoryFilter('auto_triggered')"
+            >
+              <mat-icon class="pill-icon color-danger">warning</mat-icon>
+              Gatilhos de Sobrecarga
+            </button>
+            <button
+              type="button"
+              class="history-pill"
+              [class.active]="historyModeFilter() === 'manual_timed'"
+              (click)="setHistoryFilter('manual_timed')"
+            >
+              <mat-icon class="pill-icon color-blue">schedule</mat-icon>
+              Temporizados
+            </button>
+            <button
+              type="button"
+              class="history-pill"
+              [class.active]="historyModeFilter() === 'manual_infinite'"
+              (click)="setHistoryFilter('manual_infinite')"
+            >
+              <mat-icon class="pill-icon color-indigo">all_inclusive</mat-icon>
+              Sob Demanda
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-right-group">
+          <button type="button" class="btn-refresh-history" (click)="loadHistorySessions()" [disabled]="loadingHistory()">
+            <mat-icon [class.spinning]="loadingHistory()">sync</mat-icon>
+            <span>Atualizar</span>
+          </button>
+
+          @if (historySessions().length > 0) {
+            <button type="button" class="btn-clear-history" (click)="confirmClearHistory()">
+              <mat-icon>delete_sweep</mat-icon>
+              <span>Limpar Histórico</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Grade / Lista de Sessões Gravadas -->
+      @if (loadingHistory() && historySessions().length === 0) {
+        <div class="history-loading">
+          <mat-spinner diameter="36"></mat-spinner>
+          <span>Carregando histórico de monitoramentos...</span>
+        </div>
+      } @else if (filteredHistorySessions().length === 0) {
+        <div class="empty-history-box">
+          <div class="empty-icon-wrap">
+            <mat-icon>history_toggle_off</mat-icon>
+          </div>
+          <h4>Nenhum histórico registrado</h4>
+          <p>
+            As sessões de monitoramento executadas (manuais ou disparadas por sobrecarga de CPU/RAM) ficarão gravadas aqui com gráficos, picos e consumo detalhado por aplicação.
+          </p>
+        </div>
+      } @else {
+        <div class="history-grid">
+          @for (s of filteredHistorySessions(); track s.id) {
+            <div class="session-card" (click)="viewSessionDetails(s)">
+              <div class="session-card-header">
+                <div class="session-badge-wrap">
+                  <span class="session-type-badge" [class.type-alert]="s.mode === 'auto_triggered'">
+                    {{ s.mode === 'auto_triggered' ? 'Gatilho de Sobrecarga' : (s.mode === 'manual_timed' ? 'Temporizado (' + s.durationMinutes + 'm)' : 'Manual Contínuo') }}
+                  </span>
+                  <span class="session-date font-mono">{{ formatDateTime(s.startedAt) }}</span>
+                </div>
+                <div class="session-card-actions" (click)="$event.stopPropagation()">
+                  <button type="button" class="btn-delete-card" (click)="deleteSession(s)" matTooltip="Excluir sessão">
+                    <mat-icon>delete_outline</mat-icon>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Motivo do Gatilho se houver -->
+              @if (s.triggerReason) {
+                <div class="session-reason-tag">
+                  <mat-icon>warning_amber</mat-icon>
+                  <span>{{ s.triggerReason }}</span>
+                </div>
+              }
+
+              <!-- Métricas de Pico -->
+              <div class="session-metrics-row">
+                <div class="metric-box">
+                  <span class="m-label">Pico CPU</span>
+                  <span class="m-val font-mono" [class.danger]="s.peakCpu >= 85" [class.alert]="s.peakCpu >= 60">
+                    {{ s.peakCpu.toFixed(1) }}%
+                  </span>
+                  <span class="m-sub">Média: {{ s.avgCpu.toFixed(1) }}%</span>
+                </div>
+
+                <div class="metric-box">
+                  <span class="m-label">Pico RAM</span>
+                  <span class="m-val font-mono text-purple" [class.danger]="s.peakRam >= 85" [class.alert]="s.peakRam >= 60">
+                    {{ s.peakRam.toFixed(1) }}%
+                  </span>
+                  <span class="m-sub">Média: {{ s.avgRam.toFixed(1) }}%</span>
+                </div>
+
+                <div class="metric-box">
+                  <span class="m-label">Amostras</span>
+                  <span class="m-val font-mono text-cyan">{{ s.samplesCount }}</span>
+                  <span class="m-sub">{{ s.status }}</span>
+                </div>
+              </div>
+
+              <!-- Processo com Maior Consumo (Vilão) -->
+              @if (s.topProcessName) {
+                <div class="session-top-proc">
+                  <div class="top-proc-label">
+                    <mat-icon class="fire-icon">local_fire_department</mat-icon>
+                    <span>Maior Consumidor:</span>
+                  </div>
+                  <div class="top-proc-info">
+                    <strong class="proc-name">{{ s.topProcessName }}</strong>
+                    <span class="proc-stats font-mono">({{ s.topProcessCpu.toFixed(1) }}% CPU · {{ s.topProcessRam }} MB RAM)</span>
+                  </div>
+                </div>
+              }
+
+              <div class="session-card-footer">
+                <span class="view-details-link">
+                  <span>Ver Detalhes do Consumo Individual</span>
+                  <mat-icon>arrow_forward</mat-icon>
+                </span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ════════════════════ MODAL DETALHADO DA SESSÃO (GRÁFICO + CONSUMO INDIVIDUAL) ════════════════════ -->
+  @if (selectedSessionDetails(); as details) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog modal-dialog--wide">
+        <!-- Cabeçalho do Modal -->
+        <div class="modal-dialog-header">
+          <div class="modal-title-group">
+            <div class="modal-icon-badge" [class.badge-alert]="details.session.mode === 'auto_triggered'">
+              <mat-icon>{{ details.session.mode === 'auto_triggered' ? 'warning' : 'insights' }}</mat-icon>
+            </div>
+            <div>
+              <h3>Relatório Detalhado de Monitoramento</h3>
+              <p>
+                Iniciado em {{ formatDateTime(details.session.startedAt) }} · {{ details.snapshots.length }} amostras coletadas
+              </p>
+            </div>
+          </div>
+          <div class="modal-header-actions">
+            <button type="button" class="btn-export-csv" (click)="exportSessionCsv()" matTooltip="Exportar dados para planilha CSV">
+              <mat-icon>download</mat-icon>
+              <span>Exportar CSV</span>
+            </button>
+            <button type="button" class="btn-close-modal" (click)="selectedSessionDetails.set(null)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-dialog-body modal-scrollable">
+          <!-- Banner de Estatísticas Resumidas -->
+          <div class="stats-banner-grid">
+            <div class="stat-pill-card">
+              <span class="sp-label">Pico de CPU</span>
+              <span class="sp-val font-mono" [class.danger]="details.session.peakCpu >= 85">
+                {{ details.session.peakCpu.toFixed(1) }}%
+              </span>
+              <span class="sp-sub font-mono">Média: {{ details.session.avgCpu.toFixed(1) }}%</span>
+            </div>
+
+            <div class="stat-pill-card">
+              <span class="sp-label">Pico de RAM</span>
+              <span class="sp-val font-mono text-purple" [class.danger]="details.session.peakRam >= 85">
+                {{ details.session.peakRam.toFixed(1) }}%
+              </span>
+              <span class="sp-sub font-mono">Média: {{ details.session.avgRam.toFixed(1) }}%</span>
+            </div>
+
+            <div class="stat-pill-card">
+              <span class="sp-label">Duração Efetiva</span>
+              <span class="sp-val font-mono">{{ calculateDuration(details.session.startedAt, details.session.endsAt) }}</span>
+              <span class="sp-sub">{{ details.session.mode }}</span>
+            </div>
+
+            <div class="stat-pill-card">
+              <span class="sp-label">Aplicações Ativas</span>
+              <span class="sp-val font-mono text-emerald">{{ details.processRankings.length }}</span>
+              <span class="sp-sub">Processos mapeados</span>
+            </div>
+          </div>
+
+          <!-- Linha do Tempo Visual dos Picos (Timeline Chart Interativo) -->
+          <div class="timeline-chart-section">
+            <div class="section-header-flex">
+              <h4 class="section-title">
+                <mat-icon>show_chart</mat-icon>
+                <span>Curva de Consumo & Picos ao Longo do Tempo (Clique em qualquer horário para inspecionar)</span>
+              </h4>
+              <div class="chart-legend-row">
+                <div class="legend-item"><span class="color-dot cpu"></span><span>CPU (%)</span></div>
+                <div class="legend-item"><span class="color-dot ram"></span><span>RAM (%)</span></div>
+              </div>
+            </div>
+
+            <div class="timeline-bars-wrapper">
+              @for (snap of details.snapshots; track snap.id) {
+                <div
+                  class="timeline-col clickable"
+                  [class.is-selected]="selectedSnapshot()?.id === snap.id"
+                  (click)="selectSnapshot(snap)"
+                  [matTooltip]="'Clique para ver instância das ' + formatTimeOnly(snap.capturedAt) + ' (CPU: ' + snap.cpuPercent.toFixed(1) + '% | RAM: ' + snap.ramPercent.toFixed(1) + '%)'"
+                >
+                  <div class="bar-pair">
+                    <!-- Barra de CPU -->
+                    <div class="bar-cpu" [style.height.%]="snap.cpuPercent" [class.alert]="snap.cpuPercent >= 75" [class.danger]="snap.cpuPercent >= 90"></div>
+                    <!-- Barra de RAM -->
+                    <div class="bar-ram" [style.height.%]="snap.ramPercent" [class.alert]="snap.ramPercent >= 75" [class.danger]="snap.ramPercent >= 90"></div>
+                  </div>
+                  <span class="time-label font-mono">{{ formatTimeOnly(snap.capturedAt) }}</span>
+                  @if (selectedSnapshot()?.id === snap.id) {
+                    <div class="time-active-pointer">
+                      <mat-icon>arrow_drop_up</mat-icon>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Seletor Rápido de Instâncias por Horário (Timeline Strip) -->
+            <div class="time-instance-selector-bar">
+              <div class="selector-meta">
+                <mat-icon class="meta-icon">schedule</mat-icon>
+                <span class="meta-label">Instâncias por Horário:</span>
+              </div>
+
+              <div class="selector-chips-scroll">
+                <button
+                  type="button"
+                  class="time-chip-btn"
+                  [class.active]="selectedSnapshot() === null"
+                  (click)="selectSnapshot(null)"
+                  matTooltip="Ver média consolidada e picos de toda a sessão"
+                >
+                  <mat-icon class="chip-icon">all_inclusive</mat-icon>
+                  <span>Visão Consolidada Geral</span>
+                </button>
+
+                @for (snap of details.snapshots; track snap.id) {
+                  <button
+                    type="button"
+                    class="time-chip-btn"
+                    [class.active]="selectedSnapshot()?.id === snap.id"
+                    [class.chip-danger]="snap.cpuPercent >= 85 || snap.ramPercent >= 85"
+                    (click)="selectSnapshot(snap)"
+                    [matTooltip]="'Inspecionar instância gravada às ' + formatTimeOnly(snap.capturedAt)"
+                  >
+                    <span class="chip-time font-mono">{{ formatTimeOnly(snap.capturedAt) }}</span>
+                    <span class="chip-cpu-badge font-mono">{{ snap.cpuPercent.toFixed(0) }}%</span>
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Banner de Destaque da Instância de Horário Selecionada -->
+          @if (selectedSnapshot(); as curSnap) {
+            <div class="snapshot-focus-card">
+              <div class="focus-left-info">
+                <div class="focus-icon-circle">
+                  <mat-icon>history_toggle_off</mat-icon>
+                </div>
+                <div>
+                  <div class="focus-heading-row">
+                    <strong class="focus-title">Instância Gravada às {{ formatTimeOnly(curSnap.capturedAt) }}</strong>
+                    <span class="focus-date font-mono">{{ formatDateTime(curSnap.capturedAt) }}</span>
+                  </div>
+                  <p class="focus-subtitle">
+                    Exibindo os processos em execução e consumo capturados exatamente neste segundo
+                  </p>
+                </div>
+              </div>
+
+              <div class="focus-metrics-flex">
+                <div class="focus-metric-pill">
+                  <span class="f-label">CPU Host</span>
+                  <span class="f-val font-mono" [class.danger]="curSnap.cpuPercent >= 85">{{ curSnap.cpuPercent.toFixed(1) }}%</span>
+                </div>
+                <div class="focus-metric-pill">
+                  <span class="f-label">Memória RAM</span>
+                  <span class="f-val font-mono text-purple">{{ curSnap.ramPercent.toFixed(1) }}% ({{ (curSnap.ramUsedMB / 1024).toFixed(1) }} GB)</span>
+                </div>
+                <div class="focus-metric-pill">
+                  <span class="f-label">Processos Mapeados</span>
+                  <span class="f-val font-mono">{{ curSnap.totalProcesses }}</span>
+                </div>
+                <button type="button" class="btn-reset-focus" (click)="selectSnapshot(null)" matTooltip="Voltar para a visão geral consolidada da sessão">
+                  <mat-icon>undo</mat-icon>
+                  <span>Voltar para Consolidado</span>
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Tabela de Consumo Individual por Processo (Ranking) com Ordenação e Agrupamento -->
+          <div class="ranking-table-section">
+            <div class="section-header-flex">
+              <h4 class="section-title">
+                <mat-icon>leaderboard</mat-icon>
+                <span>
+                  {{ selectedSnapshot() ? 'Processos na Instância das ' + formatTimeOnly(selectedSnapshot()!.capturedAt) : 'Consumo Consolidado por Aplicação (Picos & Médias da Sessão)' }}
+                </span>
+              </h4>
+              <span class="ranking-count-badge font-mono">
+                {{ groupedModalProcesses().length }} aplicações unificadas
+              </span>
+            </div>
+
+            <div class="table-responsive">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">Tipo</th>
+                    <th style="width: 100px;" class="sortable-header" (click)="toggleDetailsSort('pid')">
+                      <div class="header-sort-wrap">
+                        <span>PID</span>
+                        <mat-icon class="sort-icon" [class.active]="detailsSortColumn() === 'pid'">
+                          {{ detailsSortColumn() === 'pid' ? (detailsSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                        </mat-icon>
+                      </div>
+                    </th>
+                    <th class="sortable-header" (click)="toggleDetailsSort('name')">
+                      <div class="header-sort-wrap">
+                        <span>Aplicação / Processo (Unificado)</span>
+                        <mat-icon class="sort-icon" [class.active]="detailsSortColumn() === 'name'">
+                          {{ detailsSortColumn() === 'name' ? (detailsSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                        </mat-icon>
+                      </div>
+                    </th>
+                    <th style="width: 140px;" class="text-right sortable-header" (click)="toggleDetailsSort('peakCpu')">
+                      <div class="header-sort-wrap justify-end">
+                        <span>{{ selectedSnapshot() ? 'Uso de CPU' : 'Pico de CPU' }}</span>
+                        <mat-icon class="sort-icon" [class.active]="detailsSortColumn() === 'peakCpu'">
+                          {{ detailsSortColumn() === 'peakCpu' ? (detailsSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                        </mat-icon>
+                      </div>
+                    </th>
+                    <th style="width: 130px;" class="text-right sortable-header" (click)="toggleDetailsSort('avgCpu')">
+                      <div class="header-sort-wrap justify-end">
+                        <span>Média CPU</span>
+                        <mat-icon class="sort-icon" [class.active]="detailsSortColumn() === 'avgCpu'">
+                          {{ detailsSortColumn() === 'avgCpu' ? (detailsSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                        </mat-icon>
+                      </div>
+                    </th>
+                    <th style="width: 140px;" class="text-right sortable-header" (click)="toggleDetailsSort('peakRam')">
+                      <div class="header-sort-wrap justify-end">
+                        <span>{{ selectedSnapshot() ? 'Memória RAM' : 'Pico de RAM' }}</span>
+                        <mat-icon class="sort-icon" [class.active]="detailsSortColumn() === 'peakRam'">
+                          {{ detailsSortColumn() === 'peakRam' ? (detailsSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                        </mat-icon>
+                      </div>
+                    </th>
+                    <th style="width: 130px;" class="text-right sortable-header" (click)="toggleDetailsSort('avgRam')">
+                      <div class="header-sort-wrap justify-end">
+                        <span>Média RAM</span>
+                        <mat-icon class="sort-icon" [class.active]="detailsSortColumn() === 'avgRam'">
+                          {{ detailsSortColumn() === 'avgRam' ? (detailsSortDirection() === 'desc' ? 'arrow_downward' : 'arrow_upward') : 'unfold_more' }}
+                        </mat-icon>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (g of groupedModalProcesses(); track g.groupKey) {
+                    <!-- Linha Pai Unificada no Modal -->
+                    <tr
+                      class="parent-group-row"
+                      [class.is-pm2-row]="g.isPm2"
+                      [class.is-expanded]="isGroupExpanded(g.groupKey)"
+                      (click)="g.instancesCount > 1 ? toggleGroupExpand(g.groupKey, $event) : null"
+                    >
+                      <td>
+                        @if (g.isPm2) {
+                          <span class="type-badge type-badge--pm2">PM2</span>
+                        } @else {
+                          <span class="type-badge type-badge--win">WIN</span>
+                        }
+                      </td>
+
+                      <td>
+                        <div class="pid-cell-wrap">
+                          <span class="cell-pid font-mono">#{{ g.primaryPid }}</span>
+                          @if (g.instancesCount > 1) {
+                            <span class="pid-more-badge font-mono">+{{ g.instancesCount - 1 }}</span>
+                          }
+                        </div>
+                      </td>
+
+                      <td>
+                        <div class="name-column">
+                          <div class="primary-row">
+                            <mat-icon class="app-row-icon" [class.pm2-icon]="g.isPm2">
+                              {{ g.isPm2 ? 'developer_board' : 'apps' }}
+                            </mat-icon>
+                            <span class="name-main" [class.highlight-name]="g.isPm2">{{ g.displayName }}</span>
+
+                            @if (g.instancesCount > 1) {
+                              <button
+                                type="button"
+                                class="group-accordion-btn"
+                                [class.expanded]="isGroupExpanded(g.groupKey)"
+                                (click)="toggleGroupExpand(g.groupKey, $event)"
+                                [matTooltip]="isGroupExpanded(g.groupKey) ? 'Recolher instâncias' : 'Expandir ' + g.instancesCount + ' instâncias separadas'"
+                              >
+                                <mat-icon class="group-btn-icon">layers</mat-icon>
+                                <span>{{ g.instancesCount }} agrupadas</span>
+                                <mat-icon class="group-btn-chevron">{{ isGroupExpanded(g.groupKey) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                              </button>
+                            }
+                          </div>
+
+                          <div class="sub-row">
+                            @if (g.instancesCount > 1) {
+                              <span class="sub-counter font-mono">+{{ g.instancesCount - 1 }} instância(s) gravadas</span>
+                            } @else {
+                              <span class="name-sub font-mono">{{ g.rawName }}.exe</span>
+                            }
+                          </div>
+                        </div>
+                      </td>
+
+                      <td class="text-right font-mono font-bold" [class.danger]="g.totalCpu >= 20" [class.alert]="g.totalCpu >= 10">
+                        {{ g.totalCpu.toFixed(1) }}%
+                        @if (g.instancesCount > 1) {
+                          <span class="metric-sub-detail font-mono">total</span>
+                        }
+                      </td>
+
+                      <td class="text-right font-mono text-muted">
+                        {{ g.avgCpu.toFixed(1) }}%
+                      </td>
+
+                      <td class="text-right font-mono font-bold text-purple">
+                        {{ g.totalRamMB.toFixed(1) }} MB
+                        @if (g.instancesCount > 1) {
+                          <span class="metric-sub-detail font-mono">total</span>
+                        }
+                      </td>
+
+                      <td class="text-right font-mono text-muted">
+                        {{ g.avgRamMB.toFixed(1) }} MB
+                      </td>
+                    </tr>
+
+                    <!-- SUB-ROWS: INSTÂNCIAS SEPARADAS NO MODAL COM O ESTILO DA IMAGEM (↳) -->
+                    @if (isGroupExpanded(g.groupKey)) {
+                      @for (inst of g.instances; track inst.pid; let idx = $index) {
+                        <tr class="child-instance-row">
+                          <td class="child-blank-cell"></td>
+
+                          <td>
+                            <span class="child-pid-badge font-mono">#{{ inst.pid }}</span>
+                          </td>
+
+                          <td>
+                            <div class="child-instance-content">
+                              <span class="sub-arrow">↳</span>
+                              <span class="child-sess-label">Instância #{{ idx + 1 }}</span>
+                              <span class="child-badge-pill font-mono">PID: {{ inst.pid }}</span>
+                              <span class="child-exe font-mono">{{ inst.rawName }}.exe</span>
+                            </div>
+                          </td>
+
+                          <td class="text-right font-mono font-bold" [class.alert]="inst.cpu >= 10">
+                            {{ inst.cpu.toFixed(1) }}%
+                          </td>
+
+                          <td class="text-right font-mono text-muted">
+                            {{ inst.avgCpu !== undefined ? inst.avgCpu.toFixed(1) + '%' : '--' }}
+                          </td>
+
+                          <td class="text-right font-mono text-purple">
+                            {{ inst.ramMB.toFixed(1) }} MB
+                          </td>
+
+                          <td class="text-right font-mono text-muted">
+                            {{ inst.avgRamMB !== undefined ? inst.avgRamMB.toFixed(1) + ' MB' : '--' }}
+                          </td>
+                        </tr>
+                      }
+                    }
+                  } @empty {
+                    <tr>
+                      <td colspan="7" class="empty-state-cell">
+                        <div class="no-data-state">
+                          <mat-icon>info_outline</mat-icon>
+                          <span>Nenhuma informação de processo registrada nesta amostragem.</span>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-dialog-footer">
+          <button type="button" class="btn-cancel" (click)="selectedSessionDetails.set(null)">Fechar Relatório</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════ MODAL DE CONFIGURAÇÃO DE GATILHO ════════════════════ -->
+  @if (showTriggerModal) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-dialog-header">
+          <div class="modal-title-group">
+            <div class="modal-icon-badge">
+              <mat-icon>tune</mat-icon>
+            </div>
+            <div>
+              <h3>Gatilho Automático de Sobrecarga</h3>
+              <p>Ativa monitoramento intensivo em tempo real ao atingir nível crítico</p>
+            </div>
+          </div>
+          <button type="button" class="btn-close-modal" (click)="toggleTriggerModal()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <div class="modal-dialog-body">
+          <div class="switch-row">
+            <label class="custom-switch">
+              <input type="checkbox" [(ngModel)]="tempConfig.enabled" />
+              <span class="slider"></span>
+              <span class="label-text">Habilitar Monitoramento Automático por Nível Crítico</span>
+            </label>
+          </div>
+
+          <div class="modal-grid-inputs">
+            <div class="input-card">
+              <label>Limiar de CPU Crítica (%)</label>
+              <div class="input-with-affix">
+                <input type="number" min="50" max="99" [(ngModel)]="tempConfig.cpuThreshold" />
+                <span class="affix">%</span>
+              </div>
+              <span class="helper">Padrão: 90% de consumo do processador</span>
+            </div>
+
+            <div class="input-card">
+              <label>Limiar de RAM Crítica (%)</label>
+              <div class="input-with-affix">
+                <input type="number" min="50" max="99" [(ngModel)]="tempConfig.ramThreshold" />
+                <span class="affix">%</span>
+              </div>
+              <span class="helper">Padrão: 90% da memória RAM física</span>
+            </div>
+
+            <div class="input-card">
+              <label>Duração do Monitoramento (min)</label>
+              <div class="input-with-affix">
+                <input type="number" min="1" max="120" [(ngModel)]="tempConfig.durationMinutes" />
+                <span class="affix">min</span>
+              </div>
+              <span class="helper">Tempo gravando após o disparo</span>
+            </div>
+
+            <div class="input-card">
+              <label>Intervalo de Cooldown (min)</label>
+              <div class="input-with-affix">
+                <input type="number" min="1" max="180" [(ngModel)]="tempConfig.cooldownMinutes" />
+                <span class="affix">min</span>
+              </div>
+              <span class="helper">Espera antes de um novo disparo</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-dialog-footer">
+          <button type="button" class="btn-cancel" (click)="toggleTriggerModal()">Cancelar</button>
+          <button type="button" class="btn-save" (click)="saveTriggerConfig()">Salvar Configuração</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
