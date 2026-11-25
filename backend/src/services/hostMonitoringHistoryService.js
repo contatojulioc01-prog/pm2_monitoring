@@ -60,6 +60,12 @@ async function initHostMonitoringTables() {
       FOREIGN KEY (sessionId) REFERENCES host_monitoring_sessions (id) ON DELETE CASCADE
     )
   `);
+
+  // Recupera sessões órfãs em 'active' após reinício
+  const orphaned = await db.all(`SELECT id FROM host_monitoring_sessions WHERE status = 'active'`);
+  for (const row of orphaned) {
+    await finishSessionRecord(row.id, 'interrupted');
+  }
 }
 
 // Cria uma nova sessão no banco
@@ -155,28 +161,40 @@ async function recordSnapshot(sessionId, metrics) {
   }
 }
 
-// Finaliza a sessão no banco
+// Finaliza a sessão no banco recalculando picos, médias e amostras
 async function finishSessionRecord(sessionId, status = 'completed') {
   const now = getLocalDateTime();
-  
-  // Calcula médias finais
+
   const stats = await db.get(`
-    SELECT AVG(cpuPercent) as avgCpu, AVG(ramPercent) as avgRam
+    SELECT
+      COUNT(*) as samplesCount,
+      MAX(cpuPercent) as peakCpu,
+      MAX(ramPercent) as peakRam,
+      AVG(cpuPercent) as avgCpu,
+      AVG(ramPercent) as avgRam,
+      MAX(capturedAt) as lastCapturedAt
     FROM host_monitoring_snapshots
     WHERE sessionId = ?
   `, [sessionId]);
 
-  const avgCpu = parseFloat((stats?.avgCpu || 0).toFixed(1));
-  const avgRam = parseFloat((stats?.avgRam || 0).toFixed(1));
+  const peakCpu = parseFloat((Number(stats?.peakCpu) || 0).toFixed(1));
+  const peakRam = parseFloat((Number(stats?.peakRam) || 0).toFixed(1));
+  const avgCpu = parseFloat((Number(stats?.avgCpu) || 0).toFixed(1));
+  const avgRam = parseFloat((Number(stats?.avgRam) || 0).toFixed(1));
+  const samplesCount = Number(stats?.samplesCount) || 0;
+  const endsAt = status === 'interrupted' && stats?.lastCapturedAt ? stats.lastCapturedAt : now;
 
   await db.run(`
     UPDATE host_monitoring_sessions SET
       endsAt = ?,
       status = ?,
+      peakCpu = MAX(COALESCE(peakCpu, 0), ?),
+      peakRam = MAX(COALESCE(peakRam, 0), ?),
       avgCpu = ?,
-      avgRam = ?
+      avgRam = ?,
+      samplesCount = MAX(COALESCE(samplesCount, 0), ?)
     WHERE id = ?
-  `, [now, status, avgCpu, avgRam, sessionId]);
+  `, [endsAt, status, peakCpu, peakRam, avgCpu, avgRam, samplesCount, sessionId]);
 }
 
 // Lista todas as sessões com filtros e estatísticas
@@ -287,6 +305,7 @@ async function clearHistory() {
 }
 
 module.exports = {
+  getLocalDateTime,
   initHostMonitoringTables,
   createSessionRecord,
   recordSnapshot,

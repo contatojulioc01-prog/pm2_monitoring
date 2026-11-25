@@ -31,10 +31,10 @@ router.get('/snapshot', async (req, res) => {
 });
 
 // Iniciar sessão de monitoramento
-router.post('/session/start', (req, res) => {
+router.post('/session/start', async (req, res) => {
   try {
     const { mode, durationMinutes } = req.body;
-    const status = hostMonitorSessionService.startSession({
+    const status = await hostMonitorSessionService.startSession({
       mode: mode || 'manual_infinite',
       durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : 10
     });
@@ -45,9 +45,9 @@ router.post('/session/start', (req, res) => {
 });
 
 // Interromper sessão ativa de monitoramento
-router.post('/session/stop', (req, res) => {
+router.post('/session/stop', async (req, res) => {
   try {
-    const status = hostMonitorSessionService.stopSession('user_manual_stop');
+    const status = await hostMonitorSessionService.stopSession('user_manual_stop');
     res.json({ success: true, message: 'Monitoramento interrompido', session: status });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -5,7 +5,7 @@
  * Integra com hostMonitoringHistoryService para salvar o histórico detalhado, picos e consumo individual.
  */
 
-const { collectHostMetrics, getGlobalMemory } = require('./hostMetricsService');
+const { collectHostMetrics, getGlobalMemory, shutdownPsWorker } = require('./hostMetricsService');
 const os = require('os');
 const { getIO } = require('../monitoring/socket/socketServer');
 const historyService = require('./hostMonitoringHistoryService');
@@ -39,13 +39,15 @@ class HostMonitorSessionService {
     this.streamTimer = null;
     this.watcherTimer = null;
     this.isCollecting = false;
+    this.collectingStartedAt = 0;
+    this.currentPushPromise = null;
 
     // Amostragem global contínua para cálculo preciso de CPU
     this.lastCpuMeasure = this.getCpuTimes();
     this.currentCpuPercent = 0;
 
     // Inicializa tabelas SQLite do histórico
-    historyService.initHostMonitoringTables().catch(err => {
+    this.tablesReady = historyService.initHostMonitoringTables().catch(err => {
       console.error('[HostMonitor] Erro ao inicializar tabelas do histórico:', err.message);
     });
   }
@@ -88,7 +90,7 @@ class HostMonitorSessionService {
         // Se já está em sessão ativa, verifica se a temporizada expirou
         if (this.session.active) {
           if (this.session.endsAt && Date.now() >= this.session.endsAt) {
-            this.stopSession('timeout');
+            await this.stopSession('timeout');
           }
           return;
         }
@@ -110,7 +112,7 @@ class HostMonitorSessionService {
                   : `Memória RAM atingiu nível crítico (${mem.usedPercent}% >= ${this.triggerConfig.ramThreshold}%)`;
 
               this.lastAutoTriggerAt = now;
-              this.startSession({
+              await this.startSession({
                 mode: 'auto_triggered',
                 durationMinutes: this.triggerConfig.durationMinutes,
                 triggerReason: reason
@@ -119,14 +121,17 @@ class HostMonitorSessionService {
           }
         }
       } catch (e) {
-        // Silencioso no loop
+        console.error('[HostMonitor] Erro no watcher contínuo:', e.message);
       }
-    }, 3000);
+    }, 5000);
+    if (this.watcherTimer.unref) this.watcherTimer.unref();
   }
 
-  startSession({ mode = 'manual_infinite', durationMinutes = 10, triggerReason = null }) {
+  async startSession({ mode = 'manual_infinite', durationMinutes = 10, triggerReason = null }) {
+    await this.tablesReady;
+
     if (this.session.active) {
-      this.stopSession('replaced');
+      await this.stopSession('replaced');
     }
 
     const sessionId = generateSessionId();
@@ -152,26 +157,26 @@ class HostMonitorSessionService {
       triggerReason
     };
 
-    // Cria o registro da sessão no SQLite
-    historyService.createSessionRecord({
-      id: sessionId,
-      mode,
-      durationMinutes,
-      triggerReason,
-      startedAt: new Date(now).toISOString()
-    }).catch(err => {
+    try {
+      await historyService.createSessionRecord({
+        id: sessionId,
+        mode,
+        durationMinutes,
+        triggerReason,
+        startedAt: historyService.getLocalDateTime(new Date(now))
+      });
+    } catch (err) {
       console.error('[HostMonitor] Erro ao gravar registro de sessão:', err.message);
-    });
+    }
 
     this.broadcastSessionState();
-
-    // Inicia streaming em tempo real (a cada 2 segundos)
     this.startStreaming();
-
     return this.getStatus();
   }
 
-  stopSession(reason = 'user_action') {
+  async stopSession(reason = 'user_action') {
+    await this.tablesReady;
+
     if (this.streamTimer) {
       clearInterval(this.streamTimer);
       this.streamTimer = null;
@@ -180,11 +185,13 @@ class HostMonitorSessionService {
     const wasActive = this.session.active;
     const finishedId = this.session.id;
 
-    if (wasActive && finishedId) {
-      // Finaliza a sessão no banco com médias e status final
-      historyService.finishSessionRecord(finishedId, reason).catch(err => {
-        console.error('[HostMonitor] Erro ao finalizar sessão no banco:', err.message);
-      });
+    if (this.currentPushPromise) {
+      try {
+        await Promise.race([
+          this.currentPushPromise,
+          new Promise((resolve) => setTimeout(resolve, 4000))
+        ]);
+      } catch (_) {}
     }
 
     this.session = {
@@ -196,6 +203,17 @@ class HostMonitorSessionService {
       durationMinutes: null,
       triggerReason: null
     };
+
+    if (wasActive && finishedId) {
+      try {
+        await historyService.finishSessionRecord(finishedId, reason);
+      } catch (err) {
+        console.error('[HostMonitor] Erro ao finalizar sessão no banco:', err.message);
+      }
+    }
+
+    // Encerra worker PowerShell ocioso ao finalizar monitoramento
+    shutdownPsWorker();
 
     if (wasActive) {
       this.broadcastSessionState(reason);
@@ -210,37 +228,55 @@ class HostMonitorSessionService {
     // Coleta inicial imediata
     this.pushMetrics();
 
-    // Intervalo de transmissão contínua a cada 2 segundos
+    // Intervalo otimizado de 4 segundos (baixo impacto de CPU)
     this.streamTimer = setInterval(() => {
       this.pushMetrics();
-    }, 2000);
+    }, 4000);
   }
 
-  async pushMetrics() {
-    if (this.isCollecting) return;
-    this.isCollecting = true;
-
-    try {
-      const metrics = await collectHostMetrics({ limit: 40 });
-      // Adiciona o status da sessão nas métricas transmitidas
-      metrics.session = this.getStatus();
-
-      // Grava snapshot no histórico se a sessão estiver ativa
-      if (this.session.active && this.session.id) {
-        historyService.recordSnapshot(this.session.id, metrics).catch(err => {
-          console.error('[HostMonitor] Erro ao gravar snapshot:', err.message);
-        });
+  pushMetrics() {
+    if (this.isCollecting) {
+      if (Date.now() - this.collectingStartedAt > 15000) {
+        console.warn('[HostMonitor] Watchdog resetou flag isCollecting após >15s.');
+        this.isCollecting = false;
+      } else {
+        return this.currentPushPromise;
       }
-
-      const io = getIO();
-      if (io) {
-        io.emit('host:metrics:stream', metrics);
-      }
-    } catch (e) {
-      // Ignora erro momentâneo
-    } finally {
-      this.isCollecting = false;
     }
+
+    this.isCollecting = true;
+    this.collectingStartedAt = Date.now();
+    const activeSessionId = this.session.active ? this.session.id : null;
+
+    const task = (async () => {
+      try {
+        const metrics = await collectHostMetrics({ limit: 40, forceFresh: true });
+        metrics.session = this.getStatus();
+
+        if (activeSessionId) {
+          try {
+            await historyService.recordSnapshot(activeSessionId, metrics);
+          } catch (err) {
+            console.error('[HostMonitor] Erro ao gravar snapshot:', err.message);
+          }
+        }
+
+        const io = getIO();
+        if (io) {
+          io.emit('host:metrics:stream', metrics);
+        }
+      } catch (e) {
+        console.error('[HostMonitor] Erro ao coletar métricas do host:', e.message);
+      } finally {
+        this.isCollecting = false;
+        if (this.currentPushPromise === task) {
+          this.currentPushPromise = null;
+        }
+      }
+    })();
+
+    this.currentPushPromise = task;
+    return task;
   }
 
   broadcastSessionState(stoppedReason = null) {
@@ -264,8 +300,8 @@ class HostMonitorSessionService {
       id: this.session.id,
       active: this.session.active,
       mode: this.session.mode,
-      startedAt: this.session.startedAt ? new Date(this.session.startedAt).toISOString() : null,
-      endsAt: this.session.endsAt ? new Date(this.session.endsAt).toISOString() : null,
+      startedAt: this.session.startedAt ? historyService.getLocalDateTime(new Date(this.session.startedAt)) : null,
+      endsAt: this.session.endsAt ? historyService.getLocalDateTime(new Date(this.session.endsAt)) : null,
       remainingSeconds,
       durationMinutes: this.session.durationMinutes,
       triggerReason: this.session.triggerReason,

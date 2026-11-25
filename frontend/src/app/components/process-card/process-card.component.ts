@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -12,7 +12,8 @@ import { Pm2Process } from '../../services/pm2.service';
   standalone: true,
   imports: [CommonModule, MatButtonModule, MatIconModule, MatTooltipModule, MatMenuModule, MatDividerModule],
   templateUrl: './process-card.component.html',
-  styleUrl: './process-card.component.scss'
+  styleUrl: './process-card.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ProcessCardComponent {
   @Input() process!: Pm2Process;

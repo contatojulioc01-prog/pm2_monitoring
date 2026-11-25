@@ -454,6 +454,11 @@
                       <mat-spinner diameter="28"></mat-spinner>
                       <span>Carregando dados dos processos no Task Manager...</span>
                     </div>
+                  } @else if (!metrics()) {
+                    <div class="no-data-state">
+                      <mat-icon>bolt</mat-icon>
+                      <span>Modo econômico ativo: clique em <strong>Monitorar Agora</strong> ou no botão <strong>Atualizar</strong> para consultar os processos do Windows sob demanda.</span>
+                    </div>
                   } @else {
                     <div class="no-data-state">
                       <mat-icon>filter_alt_off</mat-icon>

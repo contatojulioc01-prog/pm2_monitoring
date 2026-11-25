@@ -142,11 +142,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private startLiveTelemetry(): void {
     if (this.liveTelemetryTimer) return;
-    // Renderiza segundo a segundo (exatamente a cada 1000ms) sem atrasos
+    // Intervalo otimizado de 3000ms (reduz drasticamente CPU no daemon PM2 mantendo UI fluida)
     this.liveTelemetryTimer = setInterval(() => {
       if (document.hidden || !this.auth.isAuthenticated()) return;
       this.fetchTelemetry();
-    }, 1000);
+    }, 3000);
   }
 
   private stopLiveTelemetry(): void {

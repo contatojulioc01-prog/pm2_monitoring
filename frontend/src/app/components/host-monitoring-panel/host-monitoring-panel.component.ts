@@ -3,9 +3,11 @@ import {
   inject,
   computed,
   signal,
+  effect,
   OnInit,
   OnDestroy,
-  ChangeDetectorRef
+  ChangeDetectorRef,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -75,7 +77,8 @@ export interface GroupedRankingItem {
     MatProgressSpinnerModule
   ],
   templateUrl: './host-monitoring-panel.component.html',
-  styleUrls: ['./host-monitoring-panel.component.scss']
+  styleUrls: ['./host-monitoring-panel.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class HostMonitoringPanelComponent implements OnInit, OnDestroy {
   private hostService = inject(HostMonitoringService);
@@ -120,6 +123,40 @@ export class HostMonitoringPanelComponent implements OnInit, OnDestroy {
   };
 
   private timerInterval: any = null;
+
+  constructor() {
+    // Só mantém o timer de contagem regressiva ativo quando houver uma sessão temporizada rodando
+    effect(() => {
+      const s = this.session();
+      if (s.active && s.remainingSeconds !== null && s.remainingSeconds > 0) {
+        this.startCountdownTimer();
+      } else {
+        this.stopCountdownTimer();
+      }
+    });
+  }
+
+  private startCountdownTimer(): void {
+    if (this.timerInterval) return;
+    this.timerInterval = setInterval(() => {
+      const s = this.session();
+      if (s.active && s.remainingSeconds && s.remainingSeconds > 0) {
+        this.hostService.sessionStatus.update(prev => ({
+          ...prev,
+          remainingSeconds: Math.max(0, (prev.remainingSeconds || 1) - 1)
+        }));
+      } else {
+        this.stopCountdownTimer();
+      }
+    }, 1000);
+  }
+
+  private stopCountdownTimer(): void {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+  }
 
   // ── Aplicações em Tempo Real UNIFICADAS por Nome com Instâncias Separadas ──
   readonly groupedLiveProcesses = computed<GroupedHostProcess[]>(() => {
@@ -342,29 +379,12 @@ export class HostMonitoringPanelComponent implements OnInit, OnDestroy {
     if (currCfg) {
       this.tempConfig = { ...currCfg };
     }
-
-    if (!this.metrics()) {
-      this.refreshSnapshot();
-    }
-
-    this.timerInterval = setInterval(() => {
-      const s = this.session();
-      if (s.active && s.remainingSeconds && s.remainingSeconds > 0) {
-        this.hostService.sessionStatus.update(prev => ({
-          ...prev,
-          remainingSeconds: Math.max(0, (prev.remainingSeconds || 1) - 1)
-        }));
-      }
-    }, 1000);
-
-    // Carrega sessões históricas imediatamente
-    this.loadHistorySessions();
+    // Não dispara PowerShell automaticamente ao abrir o PM2 Manager (evita pico de CPU na abertura).
+    // Snapshot é coletado sob demanda (botão Atualizar ou ao iniciar Monitorar Agora).
   }
 
   ngOnDestroy(): void {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-    }
+    this.stopCountdownTimer();
   }
 
   // Alternância de Expansão de Grupos de Aplicações

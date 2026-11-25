@@ -71,9 +71,10 @@ function sampleCpuUsage() {
   lastCpuTimes = { total, idle };
 }
 
-// Amostragem constante a cada 1000ms: leitura sempre precisa, estável e com ZERO custo por requisição
+// Amostragem constante a cada 2000ms: leitura precisa, estável e custo irrelevante de CPU
 sampleCpuUsage();
-setInterval(sampleCpuUsage, 1000);
+const cpuSampleTimer = setInterval(sampleCpuUsage, 2000);
+if (cpuSampleTimer.unref) cpuSampleTimer.unref();
 
 function getCpuUsage() {
   return cachedCpuUsage;
@@ -84,7 +85,7 @@ let lastMemoryCheckTime = 0;
 
 function getMemoryUsage() {
   const now = Date.now();
-  if (cachedMemoryUsage && (now - lastMemoryCheckTime) < 1000) {
+  if (cachedMemoryUsage && (now - lastMemoryCheckTime) < 2000) {
     return cachedMemoryUsage;
   }
   const total = os.totalmem();
@@ -242,10 +243,17 @@ const pm2Recorder = require('../utils/pm2-recorder');
 let cachedTelemetry = null;
 let lastTelemetryTime = 0;
 let telemetryPromise = null;
+const TELEMETRY_CACHE_TTL_MS = 2500;
+
+// Versão do PM2 lida diretamente em memória (0ms, zero spawn de processo)
+let cachedPm2Version = 'unknown';
+try {
+  cachedPm2Version = require('pm2/package.json').version || 'unknown';
+} catch (_) {}
 
 async function getProcessesAndMetrics(forceFresh = false) {
   const now = Date.now();
-  if (!forceFresh && cachedTelemetry && (now - lastTelemetryTime) < 800) {
+  if (!forceFresh && cachedTelemetry && (now - lastTelemetryTime) < TELEMETRY_CACHE_TTL_MS) {
     return cachedTelemetry;
   }
   if (telemetryPromise) {
@@ -339,12 +347,12 @@ async function runBroadcastCycle() {
   } finally {
     isBroadcasting = false;
     if (sseClients.size > 0) {
-      scheduleNextBroadcast(1000);
+      scheduleNextBroadcast(3000);
     }
   }
 }
 
-function scheduleNextBroadcast(delayMs = 1000) {
+function scheduleNextBroadcast(delayMs = 3000) {
   if (sseLoopTimeout) clearTimeout(sseLoopTimeout);
   sseLoopTimeout = setTimeout(runBroadcastCycle, delayMs);
 }
@@ -454,14 +462,12 @@ router.get('/processes/stream', (req, res) => {
 // GET /api/system
 router.get('/system', async (req, res) => {
   try {
-    let pm2Version = 'unknown';
-    try { pm2Version = execSync('pm2 --version', { timeout: 5000 }).toString().trim(); } catch (_) {}
     res.json({
       success: true,
       data: {
         nodeVersion: process.version,
         platform: process.platform,
-        pm2Version,
+        pm2Version: cachedPm2Version,
         hostname: os.hostname(),
         uptime: process.uptime(),
         serverTime: getLocalDateTimeString(),
@@ -611,9 +617,25 @@ router.get('/processes/:id/logs', async (req, res) => {
 
     function readTail(filePath, n) {
       if (!filePath || !fs.existsSync(filePath)) return [];
+      let fd;
       try {
-        return fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean).slice(-n);
-      } catch (_) { return []; }
+        const stat = fs.statSync(filePath);
+        if (!stat.size) return [];
+        // Lê apenas os últimos 64 KB do arquivo (evita carregar logs gigantes em RAM/CPU)
+        const maxBytes = 65536;
+        const readSize = Math.min(stat.size, maxBytes);
+        const startPos = stat.size - readSize;
+        const buf = Buffer.alloc(readSize);
+        fd = fs.openSync(filePath, 'r');
+        fs.readSync(fd, buf, 0, readSize, startPos);
+        return buf.toString('utf8').split('\n').filter(Boolean).slice(-n);
+      } catch (_) {
+        return [];
+      } finally {
+        if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch (_) {}
+        }
+      }
     }
 
     const stdout = readTail(env.pm_out_log_path, lines).map(t => ({ type: 'out', text: t }));
@@ -695,7 +717,7 @@ router.get('/processes/:id/logs/stream', async (req, res) => {
             sendEvent('info', '─── log rotacionado ───');
           }
         } catch (_) {}
-      }, 500);
+      }, 1000);
 
       watchers.push(w);
     }
